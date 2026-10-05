@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpilot 控制台</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f6fa;color:#1f2937;font:15px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 60px}
+header{background:linear-gradient(135deg,#1e3a8a,#2563eb 55%,#3b82f6);color:#fff;border-radius:16px;padding:20px 28px;margin-bottom:18px;box-shadow:0 8px 24px rgba(37,99,235,.22);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+header h1{margin:0;font-size:22px}
+header .ptag{font-size:13px;color:#bfdbfe;font-weight:600;border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:2px 10px;margin-left:10px;vertical-align:middle}
+header .links a{color:#dbeafe;margin-left:14px;font-size:14px}
+header .hbtn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.45);color:#fff;border-radius:8px;padding:5px 14px;font-size:13px;cursor:pointer;margin:0 0 0 8px;text-decoration:none;display:inline-block}
+header .hbtn:hover{background:rgba(255,255,255,.28)}
+.tabs{display:flex;align-items:flex-end;gap:4px;margin-bottom:18px;border-bottom:2px solid #dbe3ef}
+.tabbtn{background:none;border:none;color:#6b7280;font-size:15px;font-weight:600;padding:9px 20px;cursor:pointer;border-radius:10px 10px 0 0;margin:0}
+.tabbtn:hover{background:#eff6ff;color:#1d4ed8}
+.tabbtn.active{color:#1d4ed8;background:#fff;border-bottom:2px solid #2563eb;margin-bottom:-2px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:18px}
+.card{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(15,23,42,.06)}
+.card .num{font-size:18px;font-weight:700;color:#1e3a8a;word-break:break-all}
+.card .lbl{color:#6b7280;font-size:12px;margin-top:2px}
+.card.ok .num{color:#16a34a}
+.card.bad .num{color:#dc2626}
+.card .btns{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+.card .btns button{background:#2563eb;border:none;border-radius:8px;padding:6px 12px;font-size:13px;color:#fff;cursor:pointer;margin:0}
+.card .btns button:hover{background:#1d4ed8}
+.card .btns button:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+section{background:#fff;border-radius:14px;padding:18px 22px;margin-bottom:18px;box-shadow:0 2px 8px rgba(15,23,42,.06)}
+section h2{margin:0 0 12px;font-size:16px;border-left:4px solid #2563eb;padding-left:10px}
+section p{margin:8px 0}
+section ul{margin:8px 0;padding-left:22px}
+section li{margin:4px 0}
+button{background:#2563eb;color:#fff;border:none;border-radius:10px;padding:9px 18px;font-size:14px;cursor:pointer;margin-right:10px;margin-bottom:8px}
+button:hover{background:#1d4ed8}
+button:disabled{background:#93c5fd;cursor:not-allowed}
+#msg{display:inline-block;margin-left:8px;font-size:13px;color:#6b7280}
+#lastRun,#nextRun{color:#374151;font-size:14px;margin-top:8px;white-space:pre-wrap;word-break:break-all}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{color:#6b7280;text-align:left;font-weight:600;padding:8px 10px;border-bottom:2px solid #e5e7eb;white-space:nowrap;font-size:13px}
+td{padding:7px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+td.k{width:34%;color:#374151}
+td.def{color:#9ca3af;font-size:12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.route-tbl td:first-child{width:56px;color:#9ca3af;font-weight:700}
+.route-tbl td.o{font-weight:700;white-space:nowrap}
+.o-proxy{color:#2563eb}
+.o-direct{color:#16a34a}
+.badge{display:inline-block;padding:1px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.b-proxy{background:#dbeafe;color:#1d4ed8}
+.b-direct{background:#dcfce7;color:#15803d}
+.b-block{background:#fee2e2;color:#b91c1c}
+.b-other{background:#f1f5f9;color:#475569}
+.log-tbl td{font-family:Consolas,"Courier New",monospace;font-size:12.5px}
+.log-tbl td.t{color:#9ca3af;white-space:nowrap}
+.log-tbl td.tgt{word-break:break-all}
+.logbar{display:flex;gap:12px;align-items:center;margin:10px 0}
+.logbar input{flex:1}
+#logStat{color:#6b7280;font-size:13px;white-space:nowrap}
+.filecard{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(15,23,42,.06);margin-bottom:18px}
+.fhead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.fhead b{font-size:15px;color:#1e3a8a}
+.fpath{color:#9ca3af;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filecard .pacsrc{max-height:none}
+code{background:#eef2ff;border-radius:4px;padding:1px 6px;font-size:13px;color:#1e40af}
+.flow{background:#eef2ff;border:1px solid #e0e7ff;border-radius:10px;padding:14px 18px;font:13px/1.7 Consolas,"Courier New",monospace;overflow-x:auto;white-space:pre;margin:0 0 8px;color:#1e3a8a}
+.pacsrc{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px 18px;font:12.5px/1.6 Consolas,"Courier New",monospace;overflow:auto;max-height:420px;white-space:pre;margin:0}
+input[type=text],input[type=number],textarea{width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font:13px/1.5 inherit;color:#1f2937}
+textarea{height:56px;resize:vertical}
+input:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:#93c5fd}
+.note{color:#9ca3af;font-size:12px;margin:10px 0 0}
+#cfgForm{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fld label,.fld .lb{display:block;font-size:13px;color:#374151;margin-bottom:4px}
+.fld input[type=text],.fld input[type=number],.fld textarea{width:100%}
+.fld.fw{grid-column:1/-1}
+.fld .def{color:#9ca3af;font-size:12px;margin-top:2px}
+#cfgForm .save{grid-column:1/-1}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #bfdbfe;border-top-color:#1e3a8a;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body><div class="wrap">
+<header>
+  <div>
+    <h1>xpilot 控制台 <span class="ptag">代理端口 10808</span></h1>
+    <div class="sub">socks5 / http 同端口 · 选点状态实时推送</div>
+  </div>
+  <div class="links">
+    <button class="hbtn" onclick="act('/api/pac-refresh')">刷新 PAC</button>
+    <button class="hbtn" onclick="act('/api/open-regedit')">打开注册表</button>
+    <a class="hbtn" href="/html/xpilot-report.html" target="_blank">运行报告</a>
+  </div>
+</header>
+<div class="tabs">
+  <button class="tabbtn active" onclick="showTab('tab-status',this)">运行状态</button>
+  <button class="tabbtn" onclick="showTab('tab-cfg',this)">参数设置</button>
+  <button class="tabbtn" onclick="showTab('tab-route',this)">路由规则</button>
+  <button class="tabbtn" onclick="showTab('tab-log',this)">访问日志</button>
+  <button class="tabbtn" onclick="showTab('tab-pac',this)">PAC 规则</button>
+  <button class="tabbtn" onclick="showTab('tab-xray',this)">xray 配置</button>
+  <button class="tabbtn" onclick="showTab('tab-xpilot',this)">xpilot 参数</button>
+</div>
+<div id="tab-status" class="tabpage">
+  <div class="cards" id="cards"></div>
+  <section>
+    <h2>选点详情</h2>
+    <div id="lastRun">尚未运行</div>
+    <div id="nextRun"></div>
+  </section>
+</div>
+<div id="tab-cfg" class="tabpage" style="display:none">
+  <section>
+    <h2>参数（灰字为默认值，保存后下一次选点生效）</h2>
+    <form id="cfgForm" onsubmit="return saveCfg(event)"></form>
+  </section>
+</div>
+<div id="tab-route" class="tabpage" style="display:none">
+  <section>
+    <h2>两级分流总览</h2>
+    <pre class="flow">浏览器请求网址
+  │
+  ├─ ① PAC 判定（在浏览器内执行）
+  │     ├─ DIRECT ────────────→ 浏览器直连目标（不经过 xpilot）
+  │     └─ PROXY 127.0.0.1:10808 → 交给本地 xray
+  │                                 │
+  │                                 ▼
+  └──────────────────── ② xray 路由判定（在本地代理内执行）
+        ├─ 内网 IP / 国内域名 / 国内 IP ──→ direct（本机直连出去）
+        └─ 其余（国外等）───────────────→ proxy（当前选中的节点）</pre>
+    <p>两层各管一段：<b>PAC</b> 决定"要不要交给 xpilot"，<b>xray 路由</b>决定"交进来之后走节点还是直连"。任何一层判为直连，流量都不会走节点。</p>
+  </section>
+  <section>
+    <h2>① PAC 路由（浏览器侧，先执行）</h2>
+    <p>系统代理为 PAC 自动配置模式，地址（注册表 AutoConfigURL）：<code id="pacUrlNow">…</code>。浏览器访问每个网址前都会先执行 PAC 脚本，对每个请求返回两种结果之一：</p>
+    <table>
+      <tr><td class="k">DIRECT</td><td>浏览器直连目标网站，流量完全不经过 xpilot / xray</td></tr>
+      <tr><td class="k">PROXY 127.0.0.1:10808</td><td>交给本地 xray，再由下面的 xray 路由做二次分流</td></tr>
+    </table>
+    <ul>
+      <li>PAC 内容来自用户数据目录（%AppData%\xpilot）下的 <code>html/pac</code> 文件，由你自行维护（标准 FindProxyForURL 语法），xpilot 不生成它的内容，只负责通过 <code>http://127.0.0.1:6001/pac</code> 提供给系统；</li>
+      <li>修改 html/pac 后点标题栏的"刷新 PAC"：xpilot 给 PAC 地址追加新的随机参数写回注册表并广播系统刷新，浏览器检测到 URL 变化会立即重新拉取规则；不手动刷新的话，最迟下一轮选点也会自动生效；</li>
+      <li>"打开注册表"按钮可直接定位到系统代理所在的注册表项（Internet Settings）。</li>
+    </ul>
+    <p>当前生效的 PAC 文件内容（实时读取 /pac）：</p>
+    <pre id="pacSrc" class="pacsrc">加载中…</pre>
+  </section>
+  <section>
+    <h2>② xray 路由（本地代理 127.0.0.1:10808，后执行）</h2>
+    <p>只有被 PAC 交给 10808 端口的流量才会进入 xray，按下面的规则二次分流。规则由 xpilot 生成配置时写死，每次选点落地都会重建，改路由需要改代码（buildXrayConfig）。</p>
+    <p><b>入站</b>：mixed 混合协议监听 127.0.0.1:10808（socks5 与 http 同端口，允许 UDP），开启流量嗅探（http/tls/quic）——从 TLS SNI、HTTP Host 还原真实目标域名，域名规则按嗅探结果匹配。</p>
+    <p><b>出站</b>：共 3 个——proxy（当前选中的 vless 节点，第一个出站）、direct（freedom，本机直接连出）、block（blackhole 黑洞，已预置但当前没有规则引用）。</p>
+    <p><b>域名策略 domainStrategy = AsIs</b>：路由只按域名规则匹配，不做本地 DNS 解析。不用 IPIfNonMatch 的原因：它需要先解析域名再匹配 IP 规则，而国内 ISP 的 DNS 会对被墙域名返回污染地址（例如谷歌的 203.208.x.x），这些假 IP 在 geoip 库里属于中国，国外站点会被"国内 IP → 直连"规则误判而打不开；AsIs 下未命中域名规则的域名把域名原样交给出站、由节点服务器负责解析，既不误判也更快。</p>
+    <table class="route-tbl">
+      <thead><tr><th>顺序</th><th>匹配条件</th><th>走向</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>目标 IP ∈ geoip:private</td><td class="o o-direct">direct</td><td>127.0.0.1、192.168.x.x、10.x.x.x 等本机/内网地址</td></tr>
+        <tr><td>2</td><td>目标域名 ∈ geosite:cn</td><td class="o o-direct">direct</td><td>国内域名库（baidu.com、qq.com、12306.cn 等）</td></tr>
+        <tr><td>3</td><td>目标 IP ∈ geoip:cn</td><td class="o o-direct">direct</td><td>国内 IP 段，主要命中纯 IP 访问的目标</td></tr>
+        <tr><td>4</td><td>其余全部流量</td><td class="o o-proxy">proxy</td><td>未命中上述规则的走第一个出站，即当前节点</td></tr>
+      </tbody>
+    </table>
+    <p>规则自上而下匹配，命中即停；geoip.dat / geosite.dat 随 exe 内嵌、释放到用户数据目录的 html\ 文件夹加载。</p>
+    <p class="note">核对走向：logs/xray-access.log 逐请求记录每个连接实际命中了哪个出站（proxy / direct），想确认某个域名怎么走，看它即可——本页"访问日志"标签页可以直接查看。<br>另外两点：选点阶段临时拉起的实测实例不带上述路由，全部流量直接走被测节点（测速口径一致，也省去 geoip/geosite 加载开销）；节点热替换只替换 proxy 出站，路由规则保持不变。</p>
+  </section>
+</div>
+<div id="tab-log" class="tabpage" style="display:none">
+  <section>
+    <h2>xray 访问日志</h2>
+    <p>用户数据目录下 logs/xray-access.log 的最近记录（新纪录在前，每 3 秒自动刷新），显示每个连接的实际走向；文件较大时只读末尾 512 KB。</p>
+    <div class="logbar">
+      <input id="logFilter" type="text" oninput="loadLog()" placeholder="过滤：输入域名 / IP / proxy / direct 等关键字">
+      <span id="logStat"></span>
+    </div>
+    <table class="log-tbl">
+      <thead><tr><th>时间</th><th>来源</th><th>目标</th><th>走向</th></tr></thead>
+      <tbody id="logBody"></tbody>
+    </table>
+    <div id="logEmpty" class="note" style="display:none">暂无日志：还没有请求经过本地代理，或日志文件尚未生成。</div>
+  </section>
+</div>
+<div id="tab-pac" class="tabpage" style="display:none">
+  <div class="filecard">
+    <div class="fhead"><b>PAC 规则文件</b><span class="fpath" id="fpath-pac"></span></div>
+    <pre id="fsrc-pac" class="pacsrc">加载中…</pre>
+    <p class="note">修改后点标题栏"刷新 PAC"强制浏览器重新拉取。</p>
+  </div>
+</div>
+<div id="tab-xray" class="tabpage" style="display:none">
+  <div class="filecard">
+    <div class="fhead"><b>xray 运行配置（config.json）</b><span class="fpath" id="fpath-xray"></span></div>
+    <pre id="fsrc-xray" class="pacsrc">加载中…</pre>
+    <p class="note">由 xpilot 在每次选点落地时自动生成，对应当前节点的启动配置。</p>
+  </div>
+</div>
+<div id="tab-xpilot" class="tabpage" style="display:none">
+  <div class="filecard">
+    <div class="fhead"><b>xpilot 参数（xpilot.json）</b><span class="fpath" id="fpath-xpilot"></span></div>
+    <pre id="fsrc-xpilot" class="pacsrc">加载中…</pre>
+    <p class="note">即"参数设置"页保存的内容，改参数请在参数页操作。</p>
+  </div>
+</div>
+</div>
+<script>
+const FIELDS = [
+ {k:'proto', l:'协议过滤'},
+ {k:'top', l:'下载实测候选数', n:1},
+ {k:'downloadSizeMB', l:'单节点下载上限 (MB)', n:1},
+ {k:'downloadTimeoutSec', l:'单节点下载超时（秒）', n:1},
+ {k:'maxLatencyMs', l:'延迟验证超时（毫秒）', n:1},
+ {k:'selectIntervalMin', l:'自动选点间隔（分钟，≥5）', n:1},
+ {k:'workers', l:'TCP 测试并发数', n:1},
+ {k:'tcpTest', l:'启用 TCP 连通测试', t:'checkbox'},
+ {k:'subscribeURLs', l:'订阅地址（每行一个）', t:'textarea', fw:1, list:1},
+ {k:'defaultNodeLink', l:'默认节点链接（兜底用）', t:'textarea', fw:1},
+ {k:'serverURL', l:'下载测速地址（默认 GitHub）', fw:1},
+ {k:'latencyURL', l:'延迟探测地址（默认 GitHub）', fw:1},
+];
+let CFG = {}, DEF = {}, built = false;
+let running = false;
+
+function showTab(id, btn) {
+  document.querySelectorAll('.tabpage').forEach(p => p.style.display = 'none');
+  document.getElementById(id).style.display = '';
+  document.querySelectorAll('.tabbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (id === 'tab-route') loadPac();
+  if (id === 'tab-pac') loadFile('pac');
+  if (id === 'tab-xray') loadFile('xray');
+  if (id === 'tab-xpilot') loadFile('xpilot');
+  if (id === 'tab-log') {
+    loadLog();
+    if (!logTimer) logTimer = setInterval(loadLog, 3000);
+  } else if (logTimer) {
+    clearInterval(logTimer); logTimer = null;
+  }
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const OUTCLS = {proxy:'b-proxy', direct:'b-direct', block:'b-block', rejected:'b-block'};
+let logTimer = null;
+async function loadLog() {
+  try {
+    const r = await (await fetch('/api/access-log')).json();
+    if (!r.ok) return;
+    const q = document.getElementById('logFilter').value.trim().toLowerCase();
+    let rows = r.rows || [];
+    let total = rows.length;
+    if (q) rows = rows.filter(x => x.join(' ').toLowerCase().includes(q));
+    let np = 0, nd = 0;
+    rows.forEach(x => { if (x[3] === 'proxy') np++; else if (x[3] === 'direct') nd++; });
+    document.getElementById('logStat').textContent =
+      rows.length + '/' + total + ' 条 · proxy ' + np + ' · direct ' + nd + (r.truncated ? ' · 已截尾' : '');
+    document.getElementById('logBody').innerHTML = rows.map(x =>
+      '<tr><td class="t">' + esc(x[0].slice(5, 19)) + '</td><td>' + esc(x[1]) + '</td><td class="tgt">' + esc(x[2]) + '</td>' +
+      '<td><span class="badge ' + (OUTCLS[x[3]] || 'b-other') + '">' + (x[3] || '未知') + '</span></td></tr>').join('');
+    document.getElementById('logEmpty').style.display = rows.length ? 'none' : '';
+  } catch (e) {}
+}
+async function loadPac() {
+  const el = document.getElementById('pacSrc');
+  try {
+    const r = await fetch('/pac');
+    if (!r.ok) {
+      el.textContent = '未找到 PAC 文件（用户数据目录 %AppData%\\xpilot\\html\\pac）。手动创建该文件后，点标题栏"刷新 PAC"即可生效。';
+      return;
+    }
+    el.textContent = await r.text();
+  } catch (e) { el.textContent = '读取失败：' + e; }
+}
+// 配置文件卡片：读取数据目录里的 pac / xray 配置 / xpilot 参数，JSON 自动格式化
+async function loadFile(name) {
+  const el = document.getElementById('fsrc-' + name);
+  el.textContent = '加载中…';
+  try {
+    const r = await (await fetch('/api/file?name=' + name)).json();
+    if (!r.ok) { el.textContent = r.error; return; }
+    document.getElementById('fpath-' + name).textContent = r.path;
+    let text = r.content;
+    if (name !== 'pac') {
+      try { text = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+    }
+    el.textContent = text;
+  } catch (e) { el.textContent = '读取失败：' + e; }
+}
+// applySnapshot 用 GET /api/config 的快照刷新整页状态（页面加载 / 收到完成事件时各取一次）
+async function refresh() {
+  try {
+    const s = await (await fetch('/api/config')).json();
+    CFG = s.cfg; DEF = s.defaults;
+    running = !!s.running;
+    if (s.pacURL) document.getElementById('pacUrlNow').textContent = s.pacURL;
+    document.getElementById('cards').innerHTML =
+      '<div class="card"><div class="num">' + esc(s.currentAddr || '-') + '</div><div class="lbl">当前节点</div></div>' +
+      '<div class="card"><div class="num">' + (running ? '<span class="spin"></span>选点中' : '空闲') + '</div>' +
+      '<div class="lbl">选点状态</div>' +
+      '<div class="note" id="stageNote">' + (running && s.stage ? esc(s.stage) : '') + '</div>' +
+      '<div class="btns">' + runBtnsHTML() + '</div></div>';
+    const lr = s.lastRun;
+    let t = '尚未运行';
+    if (!lr.time.startsWith('0001')) {
+      t = '上次选点：' + lr.time.replace('T',' ').slice(0,19) + '，耗时 ' + Math.round(lr.durationSec) + ' 秒' +
+          (lr.winner ? '，' + lr.winner : '') + (lr.error ? '，错误：' + lr.error : '');
+    }
+    document.getElementById('lastRun').textContent = t;
+    document.getElementById('nextRun').textContent =
+      (lr.time.startsWith('0001') ? '' : '下次选点：') + (s.nextRun || '');
+    if (!built) { buildForm(); built = true; }
+    fillForm();
+  } catch (e) {}
+}
+// runBtnsHTML 按运行状态渲染操作按钮（选点进行中置灰）
+function runBtnsHTML() {
+  const dis = running ? ' disabled' : '';
+  return '<button onclick="act(\'/api/run\')"' + dis + '>立即选点</button>' +
+         '<button onclick="act(\'/api/default-node\')"' + dis + '>应用默认节点</button>';
+}
+// 事件流：阶段变化 → 只更新阶段文字与按钮；完成 → 拉快照刷新全页并恢复按钮
+const es = new EventSource('/api/events');
+es.onopen = refresh;
+es.onmessage = ev => {
+  let m;
+  try { m = JSON.parse(ev.data); } catch (e) { return; }
+  if (m.type === 'stage') {
+    running = true;
+    const note = document.getElementById('stageNote');
+    if (note) note.textContent = m.text;
+    const btns = document.querySelector('#cards .btns');
+    if (btns) btns.innerHTML = runBtnsHTML();
+  } else if (m.type === 'done') {
+    // 结果只在“选点详情”区展示，不写页头
+    refresh();
+  }
+};
+function buildForm() {
+  const f = document.getElementById('cfgForm');
+  f.innerHTML = '';
+  FIELDS.forEach(fd => {
+    const d = document.createElement('div');
+    d.className = 'fld' + (fd.fw ? ' fw' : '');
+    const lb = document.createElement('label'); lb.textContent = fd.l;
+    let input;
+    if (fd.t === 'textarea') { input = document.createElement('textarea'); input.rows = 3; }
+    else if (fd.t === 'checkbox') { input = document.createElement('input'); input.type = 'checkbox'; }
+    else { input = document.createElement('input'); input.type = fd.n ? 'number' : 'text'; }
+    input.id = 'f_' + fd.k;
+    const dv = document.createElement('div'); dv.className = 'def';
+    dv.textContent = '默认：' + (Array.isArray(DEF[fd.k]) ? DEF[fd.k].join(' , ') : DEF[fd.k]);
+    d.append(lb, input, dv);
+    f.appendChild(d);
+  });
+  const sv = document.createElement('div'); sv.className = 'fld fw';
+  const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = '保存参数'; btn.onclick = saveCfg;
+  sv.appendChild(btn); f.appendChild(sv);
+}
+function fillForm() {
+  FIELDS.forEach(fd => {
+    const el = document.getElementById('f_' + fd.k);
+    const v = CFG[fd.k], d = DEF[fd.k];
+    if (fd.t === 'checkbox') el.checked = !!v;
+    else el.value = v === undefined || v === null ? '' : (Array.isArray(v) ? v.join('\n') : v);
+    el.placeholder = Array.isArray(d) ? d.join('\n') : d;
+  });
+}
+async function saveCfg(ev) {
+  if (ev) ev.preventDefault();
+  const body = JSON.parse(JSON.stringify(CFG));
+  for (const fd of FIELDS) {
+    const el = document.getElementById('f_' + fd.k);
+    if (fd.t === 'checkbox') body[fd.k] = el.checked;
+    else if (fd.n) body[fd.k] = parseInt(el.value, 10) || 0;
+    else if (fd.t === 'textarea') body[fd.k] = fd.list ? el.value.split('\n').map(x => x.trim()).filter(Boolean) : el.value.trim();
+    else body[fd.k] = el.value.trim();
+  }
+  const r = await post('/api/config', body);
+  if (r.ok) alert('保存成功，参数将在下一次选点生效');
+  else alert('保存失败：' + r.error);
+  refresh();
+  return false;
+}
+async function act(u) {
+  const r = await post(u, {});
+  if (u === '/api/pac-refresh') {
+    alert('PAC 已刷新，浏览器将重新拉取规则：\n' + r.url);
+    loadPac();
+  }
+  if (!r.ok) alert('操作失败：' + r.error);
+  setTimeout(refresh, 500);
+}
+async function post(u, body) {
+  const resp = await fetch(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  return resp.json();
+}
+refresh();
+</script>
+</body></html>

@@ -1,0 +1,6 @@
+.idea/
+*.exe
+*.exe~
+config/
+logs/
+xpilot.log

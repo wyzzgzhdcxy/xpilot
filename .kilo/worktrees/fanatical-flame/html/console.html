@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xpilot 控制台</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f4f6fa;color:#1f2937;font:15px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 60px}
+header{background:linear-gradient(135deg,#1e3a8a,#2563eb 55%,#3b82f6);color:#fff;border-radius:16px;padding:20px 28px;margin-bottom:18px;box-shadow:0 8px 24px rgba(37,99,235,.22);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+header h1{margin:0;font-size:22px}
+header .ptag{font-size:13px;color:#bfdbfe;font-weight:600;border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:2px 10px;margin-left:10px;vertical-align:middle}
+header .links a{color:#dbeafe;margin-left:14px;font-size:14px}
+header .hbtn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.45);color:#fff;border-radius:8px;padding:5px 14px;font-size:13px;cursor:pointer;margin:0 0 0 8px;text-decoration:none;display:inline-block}
+header .hbtn:hover{background:rgba(255,255,255,.28)}
+.tabs{display:flex;align-items:flex-end;gap:4px;margin-bottom:18px;border-bottom:2px solid #dbe3ef}
+.tabbtn{background:none;border:none;color:#6b7280;font-size:15px;font-weight:600;padding:9px 20px;cursor:pointer;border-radius:10px 10px 0 0;margin:0}
+.tabbtn:hover{background:#eff6ff;color:#1d4ed8}
+.tabbtn.active{color:#1d4ed8;background:#fff;border-bottom:2px solid #2563eb;margin-bottom:-2px}
+.cards{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,3fr);gap:12px;margin-bottom:18px}
+/* 窄屏堆叠:避免 fr 比例下卡片被挤得读不清 */
+@media (max-width:640px){.cards{grid-template-columns:1fr}}
+.card{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(15,23,42,.06)}
+.card .num{font-size:18px;font-weight:700;color:#1e3a8a;word-break:break-all}
+.card .lbl{color:#6b7280;font-size:12px;margin-top:2px}
+.card.ok .num{color:#16a34a}
+.card.bad .num{color:#dc2626}
+.card .btns{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+.card .btns button{background:#2563eb;border:none;border-radius:8px;padding:6px 12px;font-size:13px;color:#fff;cursor:pointer;margin:0}
+.card .btns button:hover{background:#1d4ed8}
+.card .btns button:disabled{background:#e5e7eb;color:#9ca3af;cursor:not-allowed}
+section{background:#fff;border-radius:14px;padding:18px 22px;margin-bottom:18px;box-shadow:0 2px 8px rgba(15,23,42,.06)}
+section h2{margin:0 0 12px;font-size:16px;border-left:4px solid #2563eb;padding-left:10px}
+section p{margin:8px 0}
+section ul{margin:8px 0;padding-left:22px}
+section li{margin:4px 0}
+button{background:#2563eb;color:#fff;border:none;border-radius:10px;padding:9px 18px;font-size:14px;cursor:pointer;margin-right:10px;margin-bottom:8px}
+button:hover{background:#1d4ed8}
+button:disabled{background:#93c5fd;cursor:not-allowed}
+#msg{display:inline-block;margin-left:8px;font-size:13px;color:#6b7280}
+/* 选点历史：全部展开,不限制高度(100 条全部可见) */
+.hist{border:1px solid #e5e7eb;border-radius:10px;margin-top:8px}
+.hist-row{display:grid;grid-template-columns:140px 1fr 80px 80px 110px;gap:14px;align-items:baseline;
+  padding:7px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;line-height:1.5}
+.hist-row:last-child{border-bottom:none}
+.hist-row .t{color:#9ca3af;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist-row .m{color:#374151;word-break:break-all}
+.hist-row .lat{color:#374151;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.hist-row .loss{color:#374151;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.hist-row .spd{color:#1f2937;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap;font-weight:600}
+/* 决策标签嵌入到描述列(.m)开头,fast=蓝、full=绿、select=灰、fail/trigger=红 */
+.hist-row .dc{font-weight:600;margin-right:6px}
+.hist-row .dc.fast{color:#2563eb}
+.hist-row .dc.full{color:#16a34a}
+.hist-row .dc.select{color:#6b7280}
+.hist-row .dc.fail,.hist-row .dc.trigger{color:#dc2626}
+/* 选点策略说明（动态生成,根据当前配置） */
+.probe-flow{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 16px;margin:10px 0 14px;font-size:13px;line-height:1.7;color:#374151}
+.probe-flow .pf-title{font-weight:600;color:#1e3a8a;margin-bottom:6px}
+.probe-flow ol{margin:0;padding-left:22px}
+.probe-flow ol li{margin:3px 0}
+.probe-flow .step{font-weight:600;color:#1e3a8a}
+.probe-flow .cond{font-family:Consolas,"Courier New",monospace;background:#eef2ff;padding:1px 6px;border-radius:4px;color:#1e40af;margin:0 2px}
+.probe-flow .ok{font-weight:600}
+.probe-flow .ok.fast{color:#2563eb}
+.probe-flow .ok.full{color:#16a34a}
+.probe-flow .ok.trigger{color:#dc2626}
+.hist-row.pending{background:#eff6ff;font-weight:700}
+.hist-row.pending .m{color:#1d4ed8}
+.hist-row.running .m{color:#2563eb}
+.hist-row.err .m{color:#dc2626}
+.hist-row.err .lat,.hist-row.err .loss,.hist-row.err .spd{color:#dc2626}
+/* 当前节点卡片的指标与趋势图 */
+.nmetrics{display:flex;gap:22px;margin-top:10px;flex-wrap:wrap}
+.nmetrics .mi{display:flex;flex-direction:column;gap:2px}
+.nmetrics .mi .lb{font-size:11px;color:#9ca3af}
+.nmetrics .mi .vl{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+/* 延迟=蓝、下载=红,与折线图配色对齐(覆盖原有的 good/mid/bad 字色分级) */
+.nmetrics .mi.lat .vl{color:#2563eb}
+.nmetrics .mi.spd .vl{color:#dc2626}
+.spark{margin-top:12px}
+.spark .cap{font-size:12px;color:#6b7280;margin-bottom:4px}
+.spark svg{display:block;width:100%;height:56px}
+/* 后端失联横幅 */
+#offlineBar{display:none;align-items:center;gap:10px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;
+  border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+#offlineBar.show{display:flex}
+#offlineBar .dot{width:9px;height:9px;border-radius:50%;background:#dc2626;animation:blink 1.1s infinite}
+#offlineBar button{margin:0 0 0 auto;padding:5px 12px;font-size:13px;background:#dc2626}
+#offlineBar button:hover{background:#b91c1c}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{color:#6b7280;text-align:left;font-weight:600;padding:8px 10px;border-bottom:2px solid #e5e7eb;white-space:nowrap;font-size:13px}
+td{padding:7px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+td.k{width:34%;color:#374151}
+td.def{color:#9ca3af;font-size:12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.route-tbl td:first-child{width:56px;color:#9ca3af;font-weight:700}
+.route-tbl td.o{font-weight:700;white-space:nowrap}
+.o-proxy{color:#2563eb}
+.o-direct{color:#16a34a}
+.badge{display:inline-block;padding:1px 10px;border-radius:999px;font-size:12px;font-weight:600}
+.b-proxy{background:#dbeafe;color:#1d4ed8}
+.b-direct{background:#dcfce7;color:#15803d}
+.b-block{background:#fee2e2;color:#b91c1c}
+.b-other{background:#f1f5f9;color:#475569}
+.log-tbl{table-layout:fixed}
+.log-tbl th:nth-child(1){width:146px}
+.log-tbl th:nth-child(2){width:142px}
+.log-tbl th:nth-child(4){width:92px}
+.log-tbl td{padding:7px 10px;font-family:Consolas,"Courier New",monospace;font-size:12.5px;overflow:hidden}
+.log-tbl td.t{color:#9ca3af;white-space:nowrap}
+.log-tbl td.src{color:#6b7280;white-space:nowrap;text-overflow:ellipsis}
+.log-tbl td.tgt{word-break:break-all}
+.log-tbl td.o{white-space:nowrap;text-align:right}
+.log-tbl .badge{max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;font-family:inherit}
+.logbar{display:flex;gap:12px;align-items:center;margin:10px 0}
+.logbar input{flex:1}
+#logStat{color:#6b7280;font-size:13px;white-space:nowrap}
+.filecard{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 2px 8px rgba(15,23,42,.06);margin-bottom:18px}
+.fhead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+/* flex-shrink:0 —— 标题与计数不允许被压缩。不给的话它们会被挤到逐字换行，
+   flex 容器里的中文标题尤其明显（"PAC 域名列表" 竖成一列）。空间不够时
+   由 .fpath（路径，可有可无）承担压缩。 */
+.fhead b{font-size:15px;color:#1e3a8a;flex:0 0 auto;white-space:nowrap}
+/* flex-basis:0 + min-width:0 让它吸收剩余空间并可缩到 0；但给个最小宽度，
+   避免被压成 0 导致路径完全不可见（本机路径较长，全显示会挤走搜索框）。 */
+.fpath{color:#9ca3af;font-size:12px;flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pachit{color:#2563eb;font-weight:600;flex:0 0 auto;white-space:nowrap}
+mark{background:#fde68a;color:#78350f;border-radius:3px;padding:0 1px}
+.pacmore{margin-top:12px;padding-top:10px;border-top:1px solid #334155;color:#94a3b8;font-size:12px;font-family:inherit}
+.filecard .pacsrc{max-height:none}
+code{background:#eef2ff;border-radius:4px;padding:1px 6px;font-size:13px;color:#1e40af}
+.flow{background:#eef2ff;border:1px solid #e0e7ff;border-radius:10px;padding:14px 18px;font:13px/1.7 Consolas,"Courier New",monospace;overflow-x:auto;white-space:pre;margin:0 0 8px;color:#1e3a8a}
+.pacsrc{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px 18px;font:12.5px/1.6 Consolas,"Courier New",monospace;overflow:auto;max-height:420px;white-space:pre;margin:0}
+.domlist{background:#0f172a;color:#e2e8f0;border-radius:10px;padding:14px 18px;font:12.5px/1.9 Consolas,"Courier New",monospace;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0}
+input[type=text],input[type=number],textarea{width:100%;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font:13px/1.5 inherit;color:#1f2937}
+/* 搜索框必须放在上面那条通用 input 规则之后，并用 .fhead 提特异性：
+   否则 input[type=text]{width:100%} 会把搜索框拉满整行（同优先级下后者胜）。 */
+.fhead .pacsearch{width:200px;flex:0 0 auto;border:1px solid #d1d5db;border-radius:8px;padding:5px 10px;font:12.5px/1.4 inherit;color:#1f2937;background:#fff}
+.fhead .pacsearch:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.12)}
+textarea{height:56px;resize:vertical}
+input:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:#93c5fd}
+.note{color:#9ca3af;font-size:12px;margin:10px 0 0}
+#cfgForm{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fld label,.fld .lb{display:block;font-size:13px;color:#374151;margin-bottom:4px}
+.fld input[type=text],.fld input[type=number],.fld textarea{width:100%}
+.fld.fw{grid-column:1/-1}
+.fld .def{color:#9ca3af;font-size:12px;margin-top:2px}
+#cfgForm .save{grid-column:1/-1}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #bfdbfe;border-top-color:#1e3a8a;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body><div class="wrap">
+<header>
+  <div>
+    <h1>xpilot 控制台 <span class="ptag">代理端口 10808</span></h1>
+    <div class="sub">socks5 / http 同端口 · 选点状态实时推送</div>
+  </div>
+  <div class="links">
+    <button class="hbtn" onclick="act('/api/pac-refresh')">刷新 PAC</button>
+    <button class="hbtn" onclick="act('/api/open-regedit')">打开注册表</button>
+    <a class="hbtn" href="/html/xpilot-report.html" target="_blank">运行报告</a>
+  </div>
+</header>
+<div id="offlineBar">
+  <span class="dot"></span>
+  <span id="offlineMsg">连不上后端</span>
+  <button onclick="refresh()">重试</button>
+</div>
+<div class="tabs">
+  <button class="tabbtn active" onclick="showTab('tab-status',this)">运行状态</button>
+  <button class="tabbtn" onclick="showTab('tab-cfg',this)">参数设置</button>
+  <button class="tabbtn" onclick="showTab('tab-route',this)">路由规则</button>
+  <button class="tabbtn" onclick="showTab('tab-log',this)">访问日志</button>
+  <button class="tabbtn" onclick="showTab('tab-pac',this)">PAC 规则</button>
+  <button class="tabbtn" onclick="showTab('tab-xray',this)">xray 配置</button>
+  <button class="tabbtn" onclick="showTab('tab-xpilot',this)">xpilot 参数</button>
+</div>
+<div id="tab-status" class="tabpage">
+  <div class="cards" id="cards"></div>
+  <section>
+    <h2>选点详情</h2>
+    <div id="probeFlow" class="probe-flow"></div>
+    <div id="histStat"></div>
+    <div id="hist" class="hist"></div>
+  </section>
+</div>
+<div id="tab-cfg" class="tabpage" style="display:none">
+  <section>
+    <h2>参数（灰字为默认值，保存后下一次选点生效）</h2>
+    <form id="cfgForm" onsubmit="return saveCfg(event)"></form>
+  </section>
+</div>
+<div id="tab-route" class="tabpage" style="display:none">
+  <section>
+    <h2>两级分流总览</h2>
+    <pre class="flow">浏览器请求网址
+  │
+  ├─ ① PAC 判定（在浏览器内执行）
+  │     ├─ DIRECT ────────────→ 浏览器直连目标（不经过 xpilot）
+  │     └─ PROXY 127.0.0.1:10808 → 交给本地 xray
+  │                                 │
+  │                                 ▼
+  └──────────────────── ② xray 路由判定（在本地代理内执行）
+        ├─ 内网 IP / 国内域名 / 国内 IP ──→ direct（本机直连出去）
+        └─ 其余（国外等）───────────────→ proxy（当前选中的节点）</pre>
+    <p>两层各管一段：<b>PAC</b> 决定"要不要交给 xpilot"，<b>xray 路由</b>决定"交进来之后走节点还是直连"。任何一层判为直连，流量都不会走节点。</p>
+  </section>
+  <section>
+    <h2>① PAC 路由（浏览器侧，先执行）</h2>
+    <p>系统代理为 PAC 自动配置模式，地址（注册表 AutoConfigURL）：<code id="pacUrlNow">…</code>。浏览器访问每个网址前都会先执行 PAC 脚本，对每个请求返回两种结果之一：</p>
+    <table>
+      <tr><td class="k">DIRECT</td><td>浏览器直连目标网站，流量完全不经过 xpilot / xray</td></tr>
+      <tr><td class="k">PROXY 127.0.0.1:10808</td><td>交给本地 xray，再由下面的 xray 路由做二次分流</td></tr>
+    </table>
+    <ul>
+      <li>PAC 内容来自用户数据目录（%AppData%\xpilot）下的 <code>html/pac</code> 文件，由你自行维护（标准 FindProxyForURL 语法），xpilot 不生成它的内容，只负责通过 <code>http://127.0.0.1:6001/pac</code> 提供给系统；</li>
+      <li>修改 html/pac 后点标题栏的"刷新 PAC"：xpilot 给 PAC 地址追加新的随机参数写回注册表并广播系统刷新，浏览器检测到 URL 变化会立即重新拉取规则；不手动刷新的话，最迟下一轮选点也会自动生效；</li>
+      <li>"打开注册表"按钮可直接定位到系统代理所在的注册表项（Internet Settings）。</li>
+    </ul>
+    <p class="note">PAC 文件内容请在「PAC 规则」标签页查看与编辑。</p>
+  </section>
+  <section>
+    <h2>② xray 路由（本地代理 127.0.0.1:10808，后执行）</h2>
+    <p>只有被 PAC 交给 10808 端口的流量才会进入 xray，按下面的规则二次分流。规则由 xpilot 生成配置时写死，每次选点落地都会重建，改路由需要改代码（buildXrayConfig）。</p>
+    <p><b>入站</b>：mixed 混合协议监听 127.0.0.1:10808（socks5 与 http 同端口，允许 UDP），开启流量嗅探（http/tls/quic）——从 TLS SNI、HTTP Host 还原真实目标域名，域名规则按嗅探结果匹配。</p>
+    <p><b>出站</b>：共 3 个——proxy（当前选中的 vless 节点，第一个出站）、direct（freedom，本机直接连出）、block（blackhole 黑洞，已预置但当前没有规则引用）。</p>
+    <p><b>域名策略 domainStrategy = AsIs</b>：路由只按域名规则匹配，不做本地 DNS 解析。不用 IPIfNonMatch 的原因：它需要先解析域名再匹配 IP 规则，而国内 ISP 的 DNS 会对被墙域名返回污染地址（例如谷歌的 203.208.x.x），这些假 IP 在 geoip 库里属于中国，国外站点会被"国内 IP → 直连"规则误判而打不开；AsIs 下未命中域名规则的域名把域名原样交给出站、由节点服务器负责解析，既不误判也更快。</p>
+    <table class="route-tbl">
+      <thead><tr><th>顺序</th><th>匹配条件</th><th>走向</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>目标 IP ∈ geoip:private</td><td class="o o-direct">direct</td><td>127.0.0.1、192.168.x.x、10.x.x.x 等本机/内网地址</td></tr>
+        <tr><td>2</td><td>目标域名 ∈ geosite:cn</td><td class="o o-direct">direct</td><td>国内域名库（baidu.com、qq.com、12306.cn 等）</td></tr>
+        <tr><td>3</td><td>目标 IP ∈ geoip:cn</td><td class="o o-direct">direct</td><td>国内 IP 段，主要命中纯 IP 访问的目标</td></tr>
+        <tr><td>4</td><td>其余全部流量</td><td class="o o-proxy">proxy</td><td>未命中上述规则的走第一个出站，即当前节点</td></tr>
+      </tbody>
+    </table>
+    <p>规则自上而下匹配，命中即停；geoip.dat / geosite.dat 随 exe 内嵌、释放到用户数据目录的 html\ 文件夹加载。</p>
+    <p class="note">核对走向：logs/xray-access.log 逐请求记录每个连接实际命中了哪个出站（proxy / direct），想确认某个域名怎么走，看它即可——本页"访问日志"标签页可以直接查看。<br>另外两点：选点阶段临时拉起的实测实例不带上述路由，全部流量直接走被测节点（测速口径一致，也省去 geoip/geosite 加载开销）；节点热替换只替换 proxy 出站，路由规则保持不变。</p>
+  </section>
+</div>
+<div id="tab-log" class="tabpage" style="display:none">
+  <section>
+    <h2>xray 访问日志</h2>
+    <p>用户数据目录下 logs/xray-access.log 的最近记录（新纪录在前，SSE 实时推送，不再轮询），显示每个连接的实际走向；文件较大时只读末尾 512 KB。</p>
+    <div class="logbar">
+      <input id="logFilter" type="text" oninput="renderLog()" placeholder="过滤：输入域名 / IP / proxy / direct 等关键字">
+      <span id="logStat"></span>
+    </div>
+    <table class="log-tbl">
+      <thead><tr><th>时间</th><th>来源</th><th>目标</th><th>走向</th></tr></thead>
+      <tbody id="logBody"></tbody>
+    </table>
+    <div id="logEmpty" class="note" style="display:none">暂无日志：还没有请求经过本地代理，或日志文件尚未生成。</div>
+  </section>
+</div>
+<div id="tab-pac" class="tabpage" style="display:none">
+  <div class="filecard">
+    <div class="fhead">
+      <b>PAC 域名列表</b>
+      <span class="fpath" id="fpath-pac"></span>
+      <span class="pachit" id="pacCount"></span>
+      <input type="text" class="pacsearch" id="pacSearch" placeholder="搜索域名…" autocomplete="off">
+    </div>
+    <div id="fsrc-pac" class="domlist">加载中…</div>
+    <p class="note">修改后点标题栏"刷新 PAC"强制浏览器重新拉取。</p>
+  </div>
+</div>
+<div id="tab-xray" class="tabpage" style="display:none">
+  <div class="filecard">
+    <div class="fhead"><b>xray 运行配置（config.json）</b><span class="fpath" id="fpath-xray"></span></div>
+    <pre id="fsrc-xray" class="pacsrc">加载中…</pre>
+    <p class="note">由 xpilot 在每次选点落地时自动生成，对应当前节点的启动配置。</p>
+  </div>
+</div>
+<div id="tab-xpilot" class="tabpage" style="display:none">
+  <div class="filecard">
+    <div class="fhead"><b>xpilot 参数（xpilot.json）</b><span class="fpath" id="fpath-xpilot"></span></div>
+    <pre id="fsrc-xpilot" class="pacsrc">加载中…</pre>
+    <p class="note">即"参数设置"页保存的内容，改参数请在参数页操作。</p>
+  </div>
+</div>
+</div>
+<script>
+const FIELDS = [
+ {k:'proto', l:'协议过滤'},
+ {k:'top', l:'下载实测候选数', n:1, min:1, max:50},
+ {k:'downloadSizeMB', l:'单节点下载上限 (MB)', n:1, min:1, max:1024},
+ {k:'downloadTimeoutSec', l:'单节点下载超时（秒）', n:1, min:5, max:1800},
+ {k:'maxLatencyMs', l:'延迟验证超时（毫秒）', n:1, min:100, max:60000},
+ {k:'selectIntervalMin', l:'自动选点间隔（分钟，到期先体检再决定）', n:1, min:5, max:1440},
+ {k:'probeLatencyFastMs', l:'快检延迟阈值（毫秒）', n:1, min:50, max:2000},
+ {k:'probeLossFast', l:'快检丢包阈值（0~1，越小越严）', f:1, min:0.001, max:0.5, step:0.001},
+ {k:'probeLatencyFullMs', l:'全检延迟阈值（毫秒）', n:1, min:100, max:5000},
+ {k:'probeLossFull', l:'全检丢包阈值（0~1）', f:1, min:0.001, max:1, step:0.001},
+ {k:'probeMinSpeedMbps', l:'全检最低下载速度（MB/s）', n:1, min:1, max:1024},
+ {k:'workers', l:'TCP 测试并发数', n:1, min:1, max:200},
+ {k:'tcpTest', l:'启用 TCP 连通测试', t:'checkbox'},
+ {k:'subscribeURLs', l:'订阅地址（每行一个）', t:'textarea', fw:1, list:1},
+ {k:'defaultNodeLink', l:'默认节点链接（兜底用）', t:'textarea', fw:1},
+ {k:'serverURL', l:'下载测速地址（默认 GitHub）', fw:1},
+ {k:'latencyURL', l:'延迟探测地址（默认 GitHub）', fw:1},
+];
+let CFG = {}, DEF = {}, built = false;
+let running = false;
+// validateCfg 校验表单里的数字字段：空值、非整数、超范围都算不合法。
+// 返回 [是否通过, 错误提示]；不通过时自动聚焦到出错的输入框。
+// 这是第一道校验（用户体验），后端 /api/config 还有一道兜底（防手改配置文件）。
+function validateCfg() {
+  for (const fd of FIELDS) {
+    const isNum = fd.n || fd.f;
+    if (!isNum) continue;
+    const el = document.getElementById('f_' + fd.k);
+    const fail = msg => { el.focus(); el.select && el.select(); return [false, msg]; };
+    const raw = el.value.trim();
+    if (raw === '') return fail(fd.l + '：不能为空');
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return fail(fd.l + '：必须是数字');
+    if (fd.n && !Number.isInteger(num)) return fail(fd.l + '：必须是整数');
+    if (fd.min !== undefined && num < fd.min) return fail(fd.l + '：不能小于 ' + fd.min);
+    if (fd.max !== undefined && num > fd.max) return fail(fd.l + '：不能大于 ' + fd.max);
+  }
+  return [true, ''];
+}
+
+function showTab(id, btn) {
+  document.querySelectorAll('.tabpage').forEach(p => p.style.display = 'none');
+  document.getElementById(id).style.display = '';
+  document.querySelectorAll('.tabbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (id === 'tab-pac') loadFile('pac');
+  if (id === 'tab-xray') loadFile('xray');
+  if (id === 'tab-xpilot') loadFile('xpilot');
+  if (id === 'tab-log') openLogStream();
+  else closeLogStream();
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const OUTCLS = {proxy:'b-proxy', direct:'b-direct', block:'b-block', rejected:'b-block'};
+// 与后端 logMaxLines 对齐:SSE live 推送时只保留最近 LOG_MAX 条,老的扔掉。
+const LOG_MAX = 200;
+// logRows 是当前已订阅到的四元组行,新纪录在前。
+// history 事件会整体替换,row 事件会 unshift + 截断。
+let logRows = [];
+let logES = null;
+// rowHTML 渲染单行四元组为表格行(过滤逻辑在 renderLog 里,这里只负责按行输出)。
+function rowHTML(row) {
+  return '<tr><td class="t">' + esc(row[0].slice(5, 19)) + '</td>' +
+    '<td class="src" title="' + esc(row[1]) + '">' + esc(row[1]) + '</td>' +
+    '<td class="tgt">' + esc(row[2]) + '</td>' +
+    '<td class="o"><span class="badge ' + (OUTCLS[row[3]] || 'b-other') + '" title="' + esc(row[3] || '未知') + '">' +
+    esc(row[3] || '未知') + '</span></td></tr>';
+}
+// renderLog 根据 logRows + 当前过滤词重算视图。
+// 同时由过滤框 oninput 与 SSE 事件回调共同驱动,不再用轮询触发。
+function renderLog() {
+  const q = document.getElementById('logFilter').value.trim().toLowerCase();
+  const total = logRows.length;
+  const view = q ? logRows.filter(x => x.join(' ').toLowerCase().includes(q)) : logRows;
+  let np = 0, nd = 0;
+  view.forEach(x => { if (x[3] === 'proxy') np++; else if (x[3] === 'direct') nd++; });
+  // total 达到 LOG_MAX 上限意味着「这只是最近 N 条,更早的已经扔了」,避免被看成总共 200 条。
+  const stat = q ? view.length + '/' + total + ' 条' : (total >= LOG_MAX ? '最近 ' + total + ' 条' : '共 ' + total + ' 条');
+  document.getElementById('logStat').textContent =
+    stat + ' · proxy ' + np + ' · direct ' + nd + (total >= LOG_MAX ? ' · 更早记录未显示' : '');
+  document.getElementById('logBody').innerHTML = view.map(rowHTML).join('');
+  document.getElementById('logEmpty').style.display = view.length ? 'none' : '';
+}
+// openLogStream 进 tab-log 时调:建 SSE 连接,history 事件整体替换 logRows,
+// row 事件 unshift 并截断到 LOG_MAX。EventSource 默认会自动重连,出错时浏览器自己重试。
+function openLogStream() {
+  if (logES) return;
+  logES = new EventSource('/api/access-log-stream');
+  logES.addEventListener('history', e => {
+    logRows = JSON.parse(e.data) || [];
+    renderLog();
+  });
+  logES.addEventListener('row', e => {
+    const row = JSON.parse(e.data);
+    logRows.unshift(row);
+    if (logRows.length > LOG_MAX) logRows.length = LOG_MAX;
+    renderLog();
+  });
+}
+// closeLogStream 离 tab-log 时调:释放后端 chan 与心跳,避免无意义的连接占用。
+function closeLogStream() {
+  if (!logES) return;
+  logES.close();
+  logES = null;
+}
+// 从 PAC 源码里抽出 proxyList 的域名，返回数组。
+// 只认 proxyList 数组体内「一行一个、双引号包裹」的字符串字面量；
+// 注释与 FindProxyForURL / matchAny 等函数体自然被排除在外。
+function extractPacDomains(text) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => /^\s*var\s+proxyList\s*=/.test(l));
+  if (start < 0) return null;              // 不是预期的结构，交给调用方兜底
+  const out = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*\]/.test(line)) break;        // 数组结束
+    const m = line.match(/^\s*"([^"]*)"\s*,?\s*$/);
+    if (m) out.push(m[1]);
+  }
+  return out;
+}
+// PAC 页的域名缓存：加载一次后搜索只在这个数组上过滤，不再回后端取文件。
+let pacDomains = null;
+// 单次渲染的条数上限。全量 6788 条约 89KB / 38000px 高，一次性塞进 DOM
+// 会让浏览器做 600+ 行的逐字符断行与布局，实测「赋值+强制同步布局」达 4.7~9.2ms
+// （最差 18.4ms，已超 60fps 的 16.7ms 帧预算，必然掉帧）；而纯 JS 过滤只要 0.2ms。
+// 限制 200 条时实测约 0.2ms、页面高约 1100px，输入流畅；其余靠搜索缩小范围。
+const PAC_RENDER_LIMIT = 200;
+
+// 把域名清单渲染进容器。q 非空时只显示包含 q 的域名，并高亮命中片段。
+function renderPacDomains(q) {
+  const el = document.getElementById('fsrc-pac');
+  const cnt = document.getElementById('pacCount');
+  if (pacDomains === null) return;
+  const kw = (q || '').trim().toLowerCase();
+  const hit = kw ? pacDomains.filter(d => d.toLowerCase().includes(kw)) : pacDomains;
+  const more = hit.length - PAC_RENDER_LIMIT;
+  // 计数：搜索时显示「命中 / 总数」，未搜索时显示总数
+  cnt.textContent = kw
+    ? hit.length + ' / ' + pacDomains.length + ' 条'
+    : '共 ' + pacDomains.length + ' 条';
+  if (!hit.length) { el.textContent = '没有匹配的域名'; return; }
+  const shown = more > 0 ? hit.slice(0, PAC_RENDER_LIMIT) : hit;
+  const kwEsc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = kw ? new RegExp('(' + kwEsc + ')', 'ig') : null;
+  // 高亮需要拼 HTML，域名来自用户自己的文件（可能含 < > &），必须先转义再插 <mark>。
+  let html = re ? shown.map(d => esc(d).replace(re, '<mark>$1</mark>')).join(',') : esc(shown.join(','));
+  if (more > 0) {
+    html += '<div class="pacmore">仅显示前 ' + PAC_RENDER_LIMIT + ' 条，还有 ' + more + ' 条未显示 —— 继续输入缩小范围</div>';
+  }
+  el.innerHTML = html;
+}
+
+// 配置文件卡片：读取数据目录里的 pac / xray 配置 / xpilot 参数，JSON 自动格式化
+async function loadFile(name) {
+  const el = document.getElementById('fsrc-' + name);
+  el.textContent = '加载中…';
+  try {
+    const r = await (await fetch('/api/file?name=' + name)).json();
+    if (!r.ok) { el.textContent = r.error; return; }
+    document.getElementById('fpath-' + name).textContent = r.path;
+    let text = r.content;
+    if (name === 'pac') {
+      // PAC 页只呈现域名清单：一行逗号分隔，容器负责自动换行。
+      pacDomains = extractPacDomains(text);
+      const cnt = document.getElementById('pacCount');
+      const box = document.getElementById('pacSearch');
+      if (pacDomains === null) {
+        el.textContent = text;             // 结构不符（如被换成极简模板），原样显示
+        cnt.textContent = '';
+        box.disabled = true;
+        box.placeholder = '当前 PAC 结构不支持搜索';
+        return;
+      }
+      box.disabled = false;
+      box.placeholder = '搜索域名…';
+      renderPacDomains(box.value);
+      return;
+    }
+    try { text = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+    el.textContent = text;
+  } catch (e) { el.textContent = '读取失败：' + e; }
+}
+// 搜索框：输入即过滤（前端内存筛选，无网络往返）
+document.getElementById('pacSearch').addEventListener('input', function () {
+  renderPacDomains(this.value);
+});
+// applySnapshot 用 GET /api/config 的快照刷新整页状态（页面加载 / 收到完成事件时各取一次）
+async function refresh() {
+  let s;
+  try {
+    const resp = await fetch('/api/config');
+    // 非 2xx 也判失联：后端半死时可能返回 502 的 HTML 错误页
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    s = await resp.json();
+  } catch (e) {
+    // TypeError 是 fetch 层的网络错误（进程没了），其它是 HTTP 状态异常
+    setOffline(true, e && e.name === 'TypeError' ? '连不上后端，进程可能已退出' : '后端响应异常：' + e.message);
+    return;
+  }
+  setOffline(false);
+  CFG = s.cfg; DEF = s.defaults;
+  running = !!s.running;
+  if (s.pacURL) document.getElementById('pacUrlNow').textContent = s.pacURL;
+  document.getElementById('cards').innerHTML =
+    nodeCardHTML(s) +
+    '<div class="card"><div class="num">' + (running ? '<span class="spin"></span>选点中' : '空闲') + '</div>' +
+    '<div class="lbl">选点状态</div>' +
+    '<div class="note" id="stageNote">' + (running && s.stage ? esc(s.stage) : '') + '</div>' +
+    '<div class="btns">' + runBtnsHTML() + '</div></div>';
+  renderProbeFlow(s);
+  renderHistory(s);
+  if (!built) { buildForm(); built = true; }
+  fillForm();
+}
+// ---------- 离线横幅 ----------
+let offline = false, dead = false;
+// setOffline 切换失联横幅。同值直接 return，避免每 3 秒一次的 refresh 反复写 DOM。
+function setOffline(v, reason) {
+  if (v === offline) return;
+  offline = v;
+  const bar = document.getElementById('offlineBar');
+  if (!bar) return;
+  if (v) {
+    document.getElementById('offlineMsg').textContent = reason || '连不上后端';
+    bar.classList.add('show');
+  } else {
+    bar.classList.remove('show');
+  }
+}
+// ---------- 选点历史 ----------
+// fmtTime 把 RFC3339 时间转成 "2026-09-20 10:55:50"；零值（0001-01-01）返回空串
+function fmtTime(t) {
+  if (!t || t.startsWith('0001')) return '';
+  return t.replace('T', ' ').slice(0, 19);
+}
+// renderProbeFlow 渲染选点策略说明卡片——根据 cfg 动态生成,用户改完阈值立刻能看到生效。
+// 关键不变量:① 快检不测速,② 全检=快检+5MB 测速,③ 未达标才启动完整选点。
+function renderProbeFlow(s) {
+  const f = document.getElementById('probeFlow');
+  if (!f) return;
+  const c = (s && s.cfg) || {};
+  const interval = c.selectIntervalMin || 10;
+  const fastL = c.probeLatencyFastMs != null ? c.probeLatencyFastMs : 200;
+  // 丢包率存为 0~1 小数,显示为百分比（保留 1 位小数,如 1.0 / 5.0）
+  const fastP = ((c.probeLossFast != null ? c.probeLossFast : 0.01) * 100);
+  const fastPText = fastP < 1 ? fastP.toFixed(1) : fastP.toFixed(0);
+  const fullL = c.probeLatencyFullMs != null ? c.probeLatencyFullMs : 400;
+  const fullP = ((c.probeLossFull != null ? c.probeLossFull : 0.05) * 100);
+  const fullPText = fullP < 1 ? fullP.toFixed(1) : fullP.toFixed(0);
+  const speedMinBps = c.probeMinSpeedBps != null ? c.probeMinSpeedBps : 5*1024*1024;
+  const speedMB = (speedMinBps / 1024 / 1024);
+  const speedText = speedMB >= 1 ? speedMB.toFixed(0) : speedMB.toFixed(1);
+  const top = c.top != null ? c.top : 5;
+  f.innerHTML =
+    '<div class="pf-title">调度策略 · 每 ' + esc(interval) + ' 分钟体检当前节点</div>' +
+    '<ol>' +
+    '<li><span class="step">① 快检</span>（测延迟+丢包）→ ' +
+      '<span class="cond">延迟&lt;' + esc(fastL) + 'ms</span> 且 ' +
+      '<span class="cond">丢包&lt;' + esc(fastPText) + '%</span> → ' +
+      '<span class="ok fast">⚡跳过本轮（不测速）</span></li>' +
+    '<li><span class="step">② 全检</span>（快检通过后再补 5 MB 测速）→ ' +
+      '<span class="cond">延迟&lt;' + esc(fullL) + 'ms</span> 且 ' +
+      '<span class="cond">丢包≤' + esc(fullPText) + '%</span> 且 ' +
+      '<span class="cond">速度≥' + esc(speedText) + ' MB/s</span> → ' +
+      '<span class="ok full">✓跳过本轮</span></li>' +
+    '<li><span class="step">③ 触发完整选点</span>（以上未达标或体检失败）→ ' +
+      '<span class="ok trigger">⚠起 xray 实例并发测所有节点延迟+丢包 → 取延迟 top ' + esc(top) + ' 串行下载测速 → 选最快（粘性 80% 保当前节点）</span></li>' +
+    '</ol>';
+}
+// renderHistory 渲染「待执行 + 历史」列表。
+// 首行不是历史记录，而是待执行时间（nextRun）；running 时该行显示当前阶段。
+// 历史行倒序（最新在上），所以最新记录天然在顶部，无需滚动定位。
+function renderHistory(s) {
+  const hist = s.history || [];
+  // 后端 historyLimit 一定会下发(HistoryLimit 常量),不在前端硬编码 fallback。
+  const limit = s.historyLimit || 0;
+  const rows = [];
+  const never = !s.lastRun || !s.lastRun.time || s.lastRun.time.startsWith('0001');
+
+  if (running) {
+    rows.push('<div class="hist-row pending running"><div class="t">' + esc(fmtTime(s.nextRun) || '待执行') +
+      '</div><div class="m"><span class="spin"></span>' + esc(s.stage || '选点中') + '</div>' +
+      '<div class="lat"></div><div class="loss"></div><div class="spd"></div></div>');
+  } else if (never) {
+    rows.push('<div class="hist-row pending"><div class="t">待执行</div><div class="m">即将开始</div>' +
+      '<div class="lat"></div><div class="loss"></div><div class="spd"></div></div>');
+  } else {
+    rows.push('<div class="hist-row pending"><div class="t">' + esc(s.nextRun || '') +
+      '</div><div class="m">下次选点</div>' +
+      '<div class="lat"></div><div class="loss"></div><div class="spd"></div></div>');
+  }
+
+  // 历史行倒序：最新在上
+  // 描述列(.m)开头嵌入决策标签:<span class="dc fast">⚡快检</span> ...
+  // 延迟、丢包率、下载速度从 h.metrics 走独立列——后端已经在 fill metricsOf()。
+  // 决策标签语义:
+  //   fast   蓝   快检通过（延迟+丢包均极佳,不测速）
+  //   full   绿   全检通过（延迟+丢包+速度均达标）
+  //   select 灰   完整选点
+  //   fail   红   体检失败（如 xray 不通）
+  //   trigger 红  体检未达标,触发了完整选点
+  const DCLabel = { fast: '⚡快检', full: '✓全检', select: '选点', fail: '⚠失败', trigger: '⚠触发' };
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const h = hist[i];
+    const secs = Math.round(h.durationSec || 0);
+    const m = h.metrics || {};
+    const lat = m.latencyMs > 0 ? (m.latencyMs + 'ms') : '—';
+    // 丢包率：仅在延迟有效时显示（验证失败节点丢包率 1.0 但延迟已是 —，统一保持 —）。
+    // 老历史数据可能没有 packetLoss 字段，typeof 守卫一下。
+    const loss = (m.latencyMs > 0 && typeof m.packetLoss === 'number')
+      ? Math.round(m.packetLoss * 100) + '%' : '—';
+    const spd = m.speedText || '—';
+    const dc = h.decision || '';
+    const dcHTML = dc ? '<span class="dc ' + esc(dc) + '">' + esc(DCLabel[dc]) + '</span>' : '';
+    let body;
+    if (h.error) {
+      body = '耗时 ' + secs + ' 秒，失败：' + h.error;
+    } else {
+      // winner 形如 "名字（addr，延迟ms，速度）",延迟和速度已挪到独立列,
+      // 这里只取到第一个"（"之前的名字 + 地址,组成描述列。
+      const fullWinner = h.winner || '已完成';
+      const nameOnly = fullWinner.split('（')[0];
+      const addr = m.addr || '';
+      body = '耗时 ' + secs + ' 秒，' + nameOnly + (addr ? '（' + addr + '）' : '');
+    }
+    rows.push('<div class="hist-row' + (h.error ? ' err' : '') + '">' +
+      '<div class="t">' + esc(fmtTime(h.time)) + '</div>' +
+      '<div class="m">' + dcHTML + esc(body) + '</div>' +
+      '<div class="lat">' + esc(lat) + '</div>' +
+      '<div class="loss">' + esc(loss) + '</div>' +
+      '<div class="spd">' + esc(spd) + '</div>' +
+      '</div>');
+  }
+
+  document.getElementById('hist').innerHTML = rows.join('');
+  const n = hist.length;
+  document.getElementById('histStat').textContent =
+    '共 ' + n + ' 条' + (n >= limit ? '（上限 ' + limit + ' 条）' : '') +
+    ' · 内存仅保留最近 ' + limit + ' 条，完整记录见 logs/xpilot-select.log';
+}
+// ---------- 当前节点卡片（指标 + 趋势图） ----------
+// latCls 按延迟阈值着色：<150ms 好、<300ms 中、其余差
+function latCls(ms) { return ms < 150 ? 'good' : (ms < 300 ? 'mid' : 'bad'); }
+// fmtSpeed 把 B/s 分级成人读单位；<=0 视为无效返「—」
+function fmtSpeed(bps) {
+  if (!bps || bps <= 0) return '—';
+  if (bps >= 1073741824) return (bps / 1073741824).toFixed(2) + ' GB/s';
+  if (bps >= 1048576) return (bps / 1048576).toFixed(2) + ' MB/s';
+  if (bps >= 1024) return (bps / 1024).toFixed(1) + ' KB/s';
+  return Math.round(bps) + ' B/s';
+}
+function nodeCardHTML(s) {
+  const m = s.current;
+  if (!m) {
+    return '<div class="card"><div class="num">' + esc(s.currentAddr || '-') + '</div>' +
+      '<div class="lbl">当前节点</div></div>';
+  }
+  const lat = m.latencyMs > 0 ? m.latencyMs + ' ms' : '—';
+  const spd = m.speedText || fmtSpeed(m.speedBps);
+  return '<div class="card"><div class="num">' + esc(m.name || s.currentAddr || '-') + '</div>' +
+    '<div class="lbl">' + esc(m.addr || s.currentAddr || '') + '</div>' +
+    '<div class="nmetrics">' +
+      '<div class="mi lat"><span class="lb">延迟</span><span class="vl">' + esc(lat) + '</span></div>' +
+      '<div class="mi spd"><span class="lb">下载速度</span><span class="vl">' + esc(spd) + '</span></div>' +
+    '</div>' + sparkHTML(s) + '</div>';
+}
+// sparkHTML 手绘内联 SVG 双折线趋势图(蓝=延迟 / 红=下载速度),不引任何图表库。
+// 两条线各自独立归一化(延迟 ms 与下载 B/s 数量级差太大,共用 Y 轴会压扁),
+// 共享 X 轴(时间索引)。取历史里最后 30 个点;点超过 12 个时只标每 5 个和最后一个,避免糊成一团。
+// 任一条线少于 2 个点就跳过那条;两条都没数据则整图不画。
+function sparkHTML(s) {
+  const hist = (s.history || []).slice(-30);
+  const latPts = hist.filter(h => h.metrics && h.metrics.latencyMs > 0).map(h => h.metrics.latencyMs);
+  const spdPts = hist.filter(h => h.metrics && h.metrics.speedBps > 0).map(h => h.metrics.speedBps);
+  if (latPts.length < 2 && spdPts.length < 2) return '';
+  const W = 320, H = 56, pad = 4;
+  const N = Math.max(latPts.length, spdPts.length);
+
+  // 各自独立归一化到 [pad, H-pad]
+  const latMin = latPts.length ? Math.min.apply(null, latPts) : 0;
+  const latMax = latPts.length ? Math.max.apply(null, latPts) : 1;
+  const latSpan = latMax - latMin || 1;
+  const spdMin = spdPts.length ? Math.min.apply(null, spdPts) : 0;
+  const spdMax = spdPts.length ? Math.max.apply(null, spdPts) : 1;
+  const spdSpan = spdMax - spdMin || 1;
+
+  const X = i => pad + i * (W - 2 * pad) / Math.max(1, N - 1);
+  const Ylat = v => H - pad - (v - latMin) * (H - 2 * pad) / latSpan;
+  const Yspd = v => H - pad - (v - spdMin) * (H - 2 * pad) / spdSpan;
+
+  // 延迟线(蓝 #2563eb)+ 半透明面积
+  let latLine = '', latArea = '', latDots = '';
+  if (latPts.length >= 2) {
+    latPts.forEach((v, i) => { latLine += (i ? ' L' : 'M') + X(i).toFixed(1) + ' ' + Ylat(v).toFixed(1); });
+    latArea = latLine + ' L' + X(latPts.length - 1).toFixed(1) + ' ' + H + ' L' + X(0).toFixed(1) + ' ' + H + ' Z';
+  }
+  latPts.forEach((v, i) => {
+    const last = i === latPts.length - 1;
+    const showDot = last || latPts.length <= 12 || i % 5 === 0;
+    if (showDot) latDots += '<circle cx="' + X(i).toFixed(1) + '" cy="' + Ylat(v).toFixed(1) +
+      '" r="' + (last ? 3 : 2) + '" fill="#2563eb"/>';
+  });
+
+  // 速度线(红 #dc2626),无面积(避免和蓝面积重叠混淆)
+  let spdLine = '', spdDots = '';
+  if (spdPts.length >= 2) {
+    spdPts.forEach((v, i) => { spdLine += (i ? ' L' : 'M') + X(i).toFixed(1) + ' ' + Yspd(v).toFixed(1); });
+  }
+  spdPts.forEach((v, i) => {
+    const last = i === spdPts.length - 1;
+    const showDot = last || spdPts.length <= 12 || i % 5 === 0;
+    if (showDot) spdDots += '<circle cx="' + X(i).toFixed(1) + '" cy="' + Yspd(v).toFixed(1) +
+      '" r="' + (last ? 3 : 2) + '" fill="#dc2626"/>';
+  });
+
+  // caption 两条线分别给趋势 + 区间
+  function cap(p, name, fmt) {
+    if (p.length < 2) return name + '—';
+    const diff = p[p.length - 1] - p[0];
+    const arrow = diff === 0 ? '持平' : (diff > 0 ? '↑ ' + fmt(diff) : '↓ ' + fmt(-diff));
+    const mn = fmt(Math.round(p.reduce((a, b) => Math.min(a, b))));
+    const mx = fmt(Math.round(p.reduce((a, b) => Math.max(a, b))));
+    return name + p.length + '次 · ' + arrow + ' · ' + mn + '~' + mx;
+  }
+  const capText = '<span style="color:#2563eb">●</span> 延迟:' + cap(latPts, '', ms => ms + ' ms') +
+    ' ｜ <span style="color:#dc2626">●</span> 下载:' + cap(spdPts, '', bps => fmtSpeed(bps));
+
+  return '<div class="spark"><div class="cap">' + capText + '</div>' +
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+    (latArea ? '<path d="' + latArea + '" fill="rgba(37,99,235,.12)"/>' : '') +
+    (latLine ? '<path d="' + latLine + '" fill="none" stroke="#2563eb" stroke-width="1.6"/>' : '') +
+    (spdLine ? '<path d="' + spdLine + '" fill="none" stroke="#dc2626" stroke-width="1.6"/>' : '') +
+    latDots + spdDots + '</svg></div>';
+}
+
+// runBtnsHTML 按运行状态渲染操作按钮（选点进行中置灰）
+function runBtnsHTML() {
+  const dis = running ? ' disabled' : '';
+  return '<button onclick="act(\'/api/run\')"' + dis + ' title="跳过体检,直接启动完整选点">立即选点</button>' +
+         '<button onclick="act(\'/api/select-with-check\')"' + dis + ' title="先体检当前节点,达标则跳过本轮">先检查再选点</button>' +
+         '<button onclick="act(\'/api/default-node\')"' + dis + '>应用默认节点</button>';
+}
+// 事件流：阶段变化 → 只更新阶段文字与按钮；完成 → 拉快照刷新全页并恢复按钮
+const es = new EventSource('/api/events');
+es.onopen = () => { setOffline(false); refresh(); };
+es.onmessage = ev => {
+  let m;
+  try { m = JSON.parse(ev.data); } catch (e) { return; }
+  if (m.type === 'stage') {
+    running = true;
+    const note = document.getElementById('stageNote');
+    if (note) note.textContent = m.text;
+    const btns = document.querySelector('#cards .btns');
+    if (btns) btns.innerHTML = runBtnsHTML();
+  } else if (m.type === 'done') {
+    // 结果只在“选点详情”区展示，不写页头
+    refresh();
+  }
+};
+// SSE 断了也标记离线：浏览器会自动重连，连不上就说明后端没了
+es.onerror = () => setOffline(true, '与后端的实时连接已断开');
+function buildForm() {
+  const f = document.getElementById('cfgForm');
+  f.innerHTML = '';
+  FIELDS.forEach(fd => {
+    const d = document.createElement('div');
+    d.className = 'fld' + (fd.fw ? ' fw' : '');
+    const lb = document.createElement('label'); lb.textContent = fd.l;
+    let input;
+    if (fd.t === 'textarea') { input = document.createElement('textarea'); input.rows = 3; }
+    else if (fd.t === 'checkbox') { input = document.createElement('input'); input.type = 'checkbox'; }
+    else {
+      input = document.createElement('input');
+      // 数字字段（fd.n=整数, fd.f=浮点）用 number 控件；其余文本
+      const isNum = fd.n || fd.f;
+      input.type = isNum ? 'number' : 'text';
+      if (isNum) {
+        if (fd.min !== undefined) input.min = fd.min;
+        if (fd.max !== undefined) input.max = fd.max;
+        if (fd.step !== undefined) input.step = fd.step;
+        input.required = true;
+        input.step = 1;
+      }
+    }
+    input.id = 'f_' + fd.k;
+    const dv = document.createElement('div'); dv.className = 'def';
+    const range = fd.n && (fd.min !== undefined || fd.max !== undefined)
+      ? '　范围：' + (fd.min !== undefined ? fd.min : '-∞') + ' ~ ' + (fd.max !== undefined ? fd.max : '∞')
+      : '';
+    dv.textContent = '默认：' + (Array.isArray(DEF[fd.k]) ? DEF[fd.k].join(' , ') : DEF[fd.k]) + range;
+    d.append(lb, input, dv);
+    f.appendChild(d);
+  });
+  const sv = document.createElement('div'); sv.className = 'fld fw';
+  const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = '保存参数'; btn.onclick = saveCfg;
+  sv.appendChild(btn); f.appendChild(sv);
+}
+function fillForm() {
+  FIELDS.forEach(fd => {
+    const el = document.getElementById('f_' + fd.k);
+    let v = CFG[fd.k], d = DEF[fd.k];
+    // 速度字段后端 B/s → 前端 MB/s
+    if (fd.k === 'probeMinSpeedMbps') {
+        v = (CFG.probeMinSpeedBps || 0) / (1024 * 1024);
+        d = (DEF.probeMinSpeedBps || 0) / (1024 * 1024);
+    }
+    if (fd.t === 'checkbox') el.checked = !!v;
+    else el.value = v === undefined || v === null ? '' : (Array.isArray(v) ? v.join('\n') : v);
+    el.placeholder = Array.isArray(d) ? d.join('\n') : d;
+  });
+}
+async function saveCfg(ev) {
+  if (ev) ev.preventDefault();
+  // 第一道校验：空值 / 非整数 / 超范围，任一不合法就拦住
+  const [ok, err] = validateCfg();
+  if (!ok) {
+    alert('参数不合法：' + err);
+    return false;
+  }
+  const body = JSON.parse(JSON.stringify(CFG));
+  for (const fd of FIELDS) {
+    const el = document.getElementById('f_' + fd.k);
+    if (fd.t === 'checkbox') body[fd.k] = el.checked;
+    else if (fd.f) body[fd.k] = parseFloat(el.value);
+    else if (fd.n) body[fd.k] = parseInt(el.value, 10);
+    else if (fd.t === 'textarea') body[fd.k] = fd.list ? el.value.split('\n').map(x => x.trim()).filter(Boolean) : el.value.trim();
+    else body[fd.k] = el.value.trim();
+  }
+  // 速度字段前端用 MB/s,提交时转 B/s
+  if (body.probeMinSpeedMbps !== undefined) {
+    body.probeMinSpeedBps = body.probeMinSpeedMbps * 1024 * 1024;
+    delete body.probeMinSpeedMbps;
+  }
+  const r = await post('/api/config', body);
+  if (r.ok) alert('保存成功，参数将在下一次选点生效');
+  else alert('保存失败：' + r.error);
+  refresh();
+  return false;
+}
+async function act(u) {
+  let r;
+  try {
+    r = await post(u, {});
+  } catch (e) {
+    // fetch 抛错 = 连不上后端（不是后端拒绝了操作），点亮横幅
+    dead = true;
+    setOffline(true, '连不上后端，进程可能已退出');
+    alert('操作失败：' + e);
+    return;
+  }
+  if (!r.ok) {
+    alert('操作失败：' + r.error);
+    return;
+  }
+  if (u === '/api/pac-refresh') {
+    alert('PAC 已刷新，浏览器将重新拉取规则：\n' + r.url);
+    // 仅在用户正看着 PAC 页时才刷新，避免无谓的文件读取
+    if (document.getElementById('tab-pac').style.display !== 'none') loadFile('pac');
+  }
+  setTimeout(refresh, 500);
+}
+async function post(u, body) {
+  const resp = await fetch(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  // 非 2xx 直接抛错：否则会把 502 的 HTML 错误页当 JSON 解析，报出莫名其妙的语法错误
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return resp.json();
+}
+refresh();
+</script>
+</body></html>
