@@ -20,13 +20,39 @@ import (
 type embeddedFile struct {
 	name string // 项目 html/ 下的文件名
 	sub  string // 数据目录里的释放子目录（空为根部）
+	// always=true 表示程序文件：每次启动都用 exe 内嵌版本覆盖，
+	// 保证页面与 PWA 资源跟程序版本一致（Service Worker 靠这个才能推到新版）。
+	// false 表示用户文件（pac、geo 资产）：只在缺失时写出，绝不覆盖用户修改。
+	always bool
 }
 
 var embeddedFiles = []embeddedFile{
-	{"console.html", "html"},
-	{"pac", "html"},
-	{"geoip.dat", "html"},
-	{"geosite.dat", "html"},
+	// 程序文件：每次启动覆盖
+	{"console.html", "html", true},
+	{"manifest.webmanifest", "html", true},
+	{"sw.js", "html", true},
+	{"icon-192.png", "html", true},
+	{"icon-512.png", "html", true},
+	{"icon-maskable-512.png", "html", true},
+	{"apple-touch-icon.png", "html", true},
+	{"favicon-32.png", "html", true},
+	// 用户文件：只补缺失
+	{"pac", "html", false},
+	{"geoip.dat", "html", false},
+	{"geosite.dat", "html", false},
+}
+
+// EmbeddedFileNames 返回要释放到用户数据目录的资源文件名列表。
+//
+// 供 main 包的测试比对 //go:embed 清单用：//go:embed 的手写清单与
+// embeddedFiles 是两份独立维护的列表，少写一处不会编译报错，
+// 只会在运行时静默缺资源（PWA 少了图标就会变成"不可安装"）。
+func EmbeddedFileNames() []string {
+	out := make([]string, 0, len(embeddedFiles))
+	for _, ef := range embeddedFiles {
+		out = append(out, ef.name)
+	}
+	return out
 }
 
 // defaultPacScript 构建 html/pac 缺失时释放的起始模板（分流口径与 xray 路由接近），
@@ -56,8 +82,8 @@ func AppDataDir() (string, error) {
 }
 
 // ReleaseEmbedded 把内嵌资源释放到用户数据目录。
-// console.html 属于程序文件，每次启动都用 exe 内嵌版本覆盖，保证页面与程序版本一致；
-// 其余文件（pac、geo 资产）只在缺失时写出，不覆盖用户修改。
+// 程序文件（console.html 与 PWA 资源）每次启动都用 exe 内嵌版本覆盖，
+// 保证页面与程序版本一致；用户文件（pac、geo 资产）只在缺失时写出，不覆盖用户修改。
 func ReleaseEmbedded(baseDir string, assets fs.FS) {
 	for _, ef := range embeddedFiles {
 		data, err := fs.ReadFile(assets, "html/"+ef.name)
@@ -66,7 +92,7 @@ func ReleaseEmbedded(baseDir string, assets fs.FS) {
 		}
 		os.MkdirAll(filepath.Join(baseDir, ef.sub), 0o755)
 		target := filepath.Join(baseDir, ef.sub, ef.name)
-		if ef.name == "console.html" {
+		if ef.always {
 			os.WriteFile(target, data, 0o644)
 			continue
 		}

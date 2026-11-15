@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -315,6 +316,69 @@ func (s *Service) pacHandler(file string) http.HandlerFunc {
 	}
 }
 
+// ---------- PWA 资源 ----------
+
+// pwaIcons 是允许通过 /icons/ 访问的图标文件名白名单。
+// 只放行这几个：直接挂 FileServer 会把整个 html 目录（含 pac、geoip.dat
+// 这些不该再开一个入口的运行文件）也暴露出去。
+var pwaIcons = map[string]bool{
+	"icon-192.png":          true,
+	"icon-512.png":          true,
+	"icon-maskable-512.png": true,
+	"apple-touch-icon.png":  true,
+	"favicon-32.png":        true,
+}
+
+// manifestHandler 提供 PWA 的 webmanifest。
+// Content-Type 必须是 application/manifest+json，否则 Chrome 不认这个清单。
+func (s *Service) manifestHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile(filepath.Join(s.htmlDir, "manifest.webmanifest"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(data)
+}
+
+// swHandler 提供 Service Worker 脚本。
+//
+// Cache-Control: no-cache —— SW 脚本必须每次回源校验，否则浏览器会一直用
+// 旧副本，PWA 的版本更新就永远推不下去。
+//
+// Service-Worker-Allowed: / —— 脚本本身就在根路径 /sw.js，默认作用域已经是 "/"，
+// 这行是冗余保险：万一以后挪到子目录，作用域不会意外收窄。
+func (s *Service) swHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile(filepath.Join(s.htmlDir, "sw.js"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Service-Worker-Allowed", "/")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(data)
+}
+
+// iconHandler 提供 PWA 图标（PNG）。
+func (s *Service) iconHandler(w http.ResponseWriter, r *http.Request) {
+	name := path.Base(r.URL.Path)
+	if !pwaIcons[name] {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := os.ReadFile(filepath.Join(s.htmlDir, name))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	// 图标是内容不变的静态资源，可以放心让浏览器缓存一段时间。
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(data)
+}
+
 // openRegedit 写入注册表编辑器的 LastKey 并启动 regedit，
 // 打开后直接定位到系统代理 PAC 所在的注册表位置。
 // 注意：LastKey 只在 regedit 启动时读取，regedit 已开着时需先关闭它再点。
@@ -335,7 +399,12 @@ func (s *Service) handleOpenRegedit(w http.ResponseWriter, r *http.Request) {
 
 // ---------- HTTP ----------
 
-func (s *Service) Listen() {
+// newMux 构建 HTTP 路由表。
+//
+// 单独抽出来是为了能在测试里用 httptest 起一个真实的服务实例，
+// 直接验证 PWA 资源（manifest / sw.js / 图标）的响应码、Content-Type 与内容，
+// 而不用去占用 6001 端口、更不用真的跑起主实例。
+func (s *Service) newMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -349,9 +418,15 @@ func (s *Service) Listen() {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// 页面每次都从磁盘读，交给浏览器缓存反而会挡住"改完刷新即生效"。
+		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(data)
 	})
 	mux.HandleFunc("/pac", s.pacHandler("pac"))
+	// PWA：清单、Service Worker、图标。缺任何一个浏览器都会判定"不可安装"。
+	mux.HandleFunc("/manifest.webmanifest", s.manifestHandler)
+	mux.HandleFunc("/sw.js", s.swHandler)
+	mux.HandleFunc("/icons/", s.iconHandler)
 	mux.HandleFunc("/api/config", s.handleConfig) // GET=页面加载时的参数与状态快照，POST=保存参数
 	mux.HandleFunc("/api/events", s.handleEvents) // SSE：实时推送选点阶段与完成事件
 	mux.HandleFunc("/api/run", s.handleRun)
@@ -362,18 +437,24 @@ func (s *Service) Listen() {
 	mux.HandleFunc("/api/access-log-stream", s.handleAccessLogStream) // SSE：实时推送 access 日志
 	mux.HandleFunc("/api/file", s.handleFileView)
 	mux.Handle("/html/", http.StripPrefix("/html/", http.FileServer(http.Dir(s.htmlDir))))
+	return mux
+}
 
-	// 服务只绑定 127.0.0.1；这里再加一道来源校验兜底，非本机回环地址一律拒绝
-	loopbackOnly := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			host, _, err := net.SplitHostPort(r.RemoteAddr)
-			if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
-				http.Error(w, "forbidden", http.StatusForbidden)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
+// loopbackOnly 只放行回环来源的请求。
+// 服务本身只绑定 127.0.0.1，这里再加一道来源校验兜底。
+func loopbackOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Service) Listen() {
+	mux := s.newMux()
 
 	addr := fmt.Sprintf("127.0.0.1:%d", DefaultWebPort)
 	fmt.Printf("Web 控制台: http://127.0.0.1:%d/ ｜ PAC: %s\n", DefaultWebPort, DefaultPacMain)

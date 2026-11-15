@@ -22,6 +22,8 @@ import (
 )
 
 //go:embed html/console.html html/pac html/geoip.dat html/geosite.dat
+//go:embed html/manifest.webmanifest html/sw.js
+//go:embed html/icon-192.png html/icon-512.png html/icon-maskable-512.png html/apple-touch-icon.png html/favicon-32.png
 var embeddedFS embed.FS
 
 func main() {

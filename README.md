@@ -22,6 +22,7 @@ Windows 上常驻运行的**代理选点管家**：从机场订阅拉节点、�
 - [配置项](#配置项)
 - [HTTP 接口](#http-接口)
 - [控制台使用说明](#控制台使用说明)
+- [PWA 支持](#pwa-支持)
 - [构建与打包](#构建与打包)
 - [测试](#测试)
 - [关键设计决策](#关键设计决策)
@@ -52,6 +53,7 @@ xpilot 的做法是：**定期把所有节点都真跑一遍，按实测速度�
 | **两级分流** | PAC 决定「要不要走代理」，xray 路由决定「走节点还是直连」，国内流量不绕路 |
 | **单文件部署** | 一个 exe，内嵌 xray-core 与 geoip/geosite 资产，可在任意位置离线运行 |
 | **Web 控制台** | 参数设置、路由规则查看、访问日志、PAC 编辑，全部在浏览器里 |
+| **PWA 可安装** | 控制台能装成独立桌面应用（无浏览器地址栏），后端没起来时仍能打开界面 |
 | **实时进度推送** | SSE 推送选点阶段，控制台不用轮询，选点过程看得见 |
 | **掉线自愈** | 看门狗每 15 秒检查主实例，挂了就用现有配置原地拉起 |
 | **失败兜底** | 所有节点都挂时，回退到预设的默认节点，不至于彻底断网 |
@@ -327,15 +329,24 @@ xpilot/
 ├── assets.go        167 行 内嵌资源释放与旧版文件迁移
 ├── xraycore.go      111 行 xray-core 库的统一接入层（直接依赖 xray-core 的文件之一）
 ├── main_test.go     564 行 单元测试
+├── pwa_test.go      PWA 端点集成测试（清单字段、图标可达性、Content-Type、图标白名单）
 ├── console.html     681 行 Web 控制台页面（内嵌进 exe）
 ├── build.ps1         78 行 打包脚本（停进程 → 构建 → 替换 → 起进程）
 ├── tools/
 │   ├── pac_rewrite.js      把原始 gfwlist 版 pac 展开成简洁版
 │   ├── pac_equiv.js        两版 pac 的等价性验证（3.3 万用例）
 │   ├── bench_pac_frame.js  PAC 域名清单的渲染性能实测（Edge CDP）
-│   └── verify_console.js   控制台页面关键行为的浏览器实测（Edge CDP）
+│   ├── verify_console.js   控制台页面关键行为的浏览器实测（Edge CDP）
+│   └── gen_icons/          PWA 图标生成器（程序化绘制 PNG，无外部素材依赖）
 └── html/
-    ├── console.html      控制台页面源文件
+    ├── console.html         控制台页面源文件
+    ├── manifest.webmanifest PWA 应用清单
+    ├── sw.js                Service Worker（离线外壳缓存）
+    ├── icon-192.png         PWA 图标 192×192
+    ├── icon-512.png         PWA 图标 512×512
+    ├── icon-maskable-512.png PWA 图标 512×512（maskable，Android 自适应图标）
+    ├── apple-touch-icon.png iOS 主屏图标 180×180
+    ├── favicon-32.png       浏览器标签页图标 32×32
     ├── pac               简洁版 PAC 规则（域名白名单，用户文件）
     ├── pac.src           原始 gfwlist 转换产物（pac_rewrite.js 的输入）
     ├── geoip.dat         19.8 MB  xray 路由用的 IP 归属地库
@@ -390,6 +401,9 @@ xpilot/
 │   └── config.json          当前节点的完整 xray 配置，每次落地时生成，供开机自愈使用
 ├── html\
 │   ├── console.html         控制台页面（每次启动由 exe 内嵌版本覆盖）
+│   ├── manifest.webmanifest PWA 应用清单（每次启动由 exe 内嵌版本覆盖）
+│   ├── sw.js                Service Worker（每次启动由 exe 内嵌版本覆盖）
+│   ├── icon-*.png           PWA 图标（每次启动由 exe 内嵌版本覆盖）
 │   ├── pac                  PAC 规则文件（用户自行维护，域名白名单模式）
 │   ├── geoip.dat            IP 归属地库（缺失时自动释放，xray 路由需要）
 │   ├── geosite.dat          域名分类库（缺失时自动释放，xray 路由需要）
@@ -540,6 +554,9 @@ xpilot 的选点流程每次都要建销一批实测实例，所以如果不处�
 | GET | `/api/access-log` | 访问日志文件末尾的解析结果，**最多 200 条**、新记录在前 |
 | GET | `/api/file?name=` | 读取配置文件内容。`name` 只接受白名单：`pac` / `xray` / `xpilot` |
 | GET | `/html/*` | 静态文件服务，指向数据目录的 `html/`（用于打开运行报告） |
+| GET | `/manifest.webmanifest` | PWA 应用清单，`Content-Type: application/manifest+json` |
+| GET | `/sw.js` | Service Worker 脚本。`Cache-Control: no-cache`（每次回源校验，否则版本更新推不下去）、`Service-Worker-Allowed: /` |
+| GET | `/icons/*` | PWA 图标（PNG）。**只放行白名单里的 5 个文件名**（`icon-192` / `icon-512` / `icon-maskable-512` / `apple-touch-icon` / `favicon-32`），其余一律 404 —— 不能让这个路径变成第二个 `html/` 目录入口 |
 
 ### SSE 事件格式
 
@@ -648,11 +665,95 @@ http://127.0.0.1:6001/pac?eaf86e4dc923
 | **xray 配置** | `config/config.json` 内容（JSON 自动格式化） |
 | **xpilot 参数** | `config/xpilot.json` 内容 |
 
-标题栏三个按钮：
+标题栏按钮：
 
+- **安装到桌面** — 把控制台装成独立应用（仅当浏览器判定当前页面可安装时才出现，见 [PWA 支持](#pwa-支持)）
 - **刷新 PAC** — 强制浏览器重新拉取 PAC 规则
 - **打开注册表** — 定位到系统代理所在的注册表项
 - **运行报告** — 新窗口打开最近一次的 HTML 运行报告
+
+---
+
+## PWA 支持
+
+控制台是一个标准的 PWA：可以装成独立桌面应用（没有浏览器地址栏、没有标签页），
+后端进程没起来时也还能打开界面。
+
+### 三个必备件
+
+浏览器判定「可安装」需要三样东西齐全，缺一个就会被判为普通网页：
+
+| 组件 | 路径 | 说明 |
+|---|---|---|
+| 应用清单 | `html/manifest.webmanifest` | 名字、图标、启动路径、显示模式、主题色 |
+| Service Worker | `html/sw.js` | 离线外壳缓存 + 版本更新链 |
+| 图标 | `html/icon-*.png` | 192 / 512 常规图标 + 512 maskable 图标 |
+
+三者都内嵌进 exe，启动时释放到 `%AppData%\xpilot\html\`，与 `console.html` 同策略：
+**每次启动都用 exe 内嵌版本覆盖**（它们是程序文件，不是用户文件），
+所以升级 xpilot 后浏览器能拿到新版本的 SW 与图标。
+
+### 缓存策略（刻意保守）
+
+控制台是**实时看板**，所以缓存只用在「静态且不会变」的地方：
+
+| 路径 | 策略 | 理由 |
+|---|---|---|
+| `/`（应用外壳） | 网络优先，失败回落缓存 | 离线也能打开界面；在线时永远拿到最新版 |
+| 图标 / manifest | 缓存优先 + 后台更新 | 静态资源，变了也不影响数据 |
+| `/api/*` | **完全不缓存** | 含 SSE 长连接（`/api/events`、`/api/access-log-stream`），缓存会把实时推送挂死 |
+| `/pac` | 不缓存 | 用户可编辑的文件，改完点「刷新 PAC」就要立刻生效 |
+| 运行报告等 `/html/*` | 不缓存 | 每次选点重新生成，缓存住会显示上一次的旧数据 |
+
+**为什么不全站 cache-first**：旧数据比报错更难排查。宁可离线时显示「连不上后端」，
+也不给一份看起来正常、实则过期的节点状态。
+
+### 版本更新链
+
+```
+xpilot 升级 → 启动时覆盖 html/sw.js → 浏览器下次访问时比对字节
+    → 发现变化 → 装新 SW → skipWaiting + clients.claim 立刻接管 → 重新拉预缓存
+```
+
+`sw.js` 的响应头带 `Cache-Control: no-cache`（每次回源校验），
+`Service-Worker-Allowed: /`（作用域锁死在根路径）。
+页面侧监听 `updatefound`，新 SW 装好后主动 `postMessage('skipWaiting')`，
+不用等用户关掉所有标签页。
+
+> ⚠️ **改动预缓存资源（图标、manifest、控制台外壳）时，记得把 `html/sw.js` 里的
+> `CACHE` 常量版本号 +1**（`'xpilot-v1'` → `'xpilot-v2'`）。
+> 缓存名一变，`install` 阶段会重新拉一遍全部预缓存资源，浏览器里的旧图标才会被替换。
+> 只改图标、不动 `sw.js` 字节的话，浏览器根本不会重新安装 SW，图标会一直是旧的。
+
+### 离线时的行为
+
+后端进程退出后打开控制台：
+
+- 应用外壳**照常渲染**（来自 Service Worker 缓存）
+- 顶部亮起「**连不上后端，进程可能已退出**」红色横幅，点「重试」可重新拉取
+- 数据区为空 —— 因为 `/api/*` 从不缓存，程序退出后就没有数据可显示
+
+这是有意为之：离线时给一份过期数据比明确报错更危险。
+
+### 安装方式
+
+Chrome / Edge 打开 <http://127.0.0.1:6001/> 后，标题栏会出现「**安装到桌面**」按钮
+（浏览器派发 `beforeinstallprompt` 事件时才显示，提前显示点了没反应更让人困惑）。
+点它会弹出系统安装确认，装完就是一个独立窗口的桌面应用。
+
+也可以直接在浏览器地址栏点安装图标，或用 DevTools → Application → Manifest 检查可安装性。
+
+### 图标是怎么来的
+
+图标是**程序化绘制**的，不含任何外部素材：
+
+```powershell
+go run ./tools/gen_icons   # 重新生成 html/icon-*.png
+```
+
+`tools/gen_icons/main.go` 用 `image/png` 手写了一个抗锯齿光栅器，
+画出「深蓝渐变圆角方块 + 白色纸飞机」。这样换机器、换 Go 版本都能复现出同样的字节，
+也不用往仓库里塞二进制设计稿。改配色或形状只需改那个文件里的常量。
 
 ---
 
@@ -710,8 +811,10 @@ go build -trimpath -ldflags "-s -w -H=windowsgui" -o xpilot.exe .
 - 构建产物约 **62.6 MB**——绝大部分是内嵌的 `geoip.dat`（19.8 MB）+ `geosite.dat`（10.5 MB）+ xray-core 全部协议模块。
 - exe 运行时如果被占用，`go build` 会报 `Access is denied`。
   手动构建时先退出正在运行的 xpilot；用 `build.ps1` 则它已代为处理。
-- `html/` 下的四个文件（`console.html` / `pac` / `geoip.dat` / `geosite.dat`）在构建时必须齐全，
-  否则 `//go:embed` 会编译失败。`pac` 若确实没有，会把内置模板释放出去。
+- `html/` 下的 PWA 资源（`manifest.webmanifest` / `sw.js` / 5 个图标）在构建时必须齐全，
+  否则 `//go:embed` 会编译失败。缺了就跑 `go run ./tools/gen_icons` 重新生成图标。
+  `html/` 下的其余文件（`console.html` / `pac` / `geoip.dat` / `geosite.dat`）同样必须齐全，
+  `pac` 若确实没有，会把内置模板释放出去。
 
 ---
 
@@ -737,6 +840,12 @@ gofmt -l .                # 检查格式
 | `TestAppendHistoryLimit` | 选点历史内存窗口：写 `HistoryLimit+30` 条后只保留最近 `HistoryLimit` 条、末条最新、首条为窗口起点 |
 | `TestAppendSelectLog` | 选点历史落盘：写 `HistoryLimit+20` 条后 `logs/xpilot-select.log` 有**全部**行（不受内存上限约束），每行均为合法 JSON 且 `error` / `metrics` 字段完整 |
 | `TestMigrateAndRelease` | 旧文件迁移（根目录 / `config/` / `html/` / `logs/` 四个历史位置）+ 内嵌资源释放（`console.html` 每次覆盖，`pac` / geo 资产仅缺失时写） |
+| `TestPWAManifest` | PWA 清单：`start_url` / `scope` 为根路径、`display=standalone`、主题色齐全、192 与 512 两种图标齐备 |
+| `TestPWAManifestIconsAreReachable` | 清单里声明的每个图标都能真的取到（清单与磁盘对不上是最常见的坑） |
+| `TestPWAServiceWorker` | SW 端点：状态码、`Content-Type`、`Cache-Control: no-cache`、`Service-Worker-Allowed: /`，且脚本里显式绕开了 `/api/`（SSE 不能被缓存接管） |
+| `TestPWAIcons` | 五个图标的响应码、`Content-Type`，以及解码后的实际像素尺寸 |
+| `TestPWAIconWhitelist` | `/icons/` 只放行白名单文件名，非图标文件一律 404 |
+| `TestPWAConsoleReferences` | 控制台页面里 manifest 链接、`sw.js` 注册代码、主题色与 iOS meta 都到位 |
 
 ### ⚠️ `TestRegistryPAC` 的副作用
 
@@ -829,6 +938,15 @@ xpilot 是无控制台的后台程序。不加 `CREATE_NO_WINDOW`（`0x08000000`
   订阅解析（`extractAddrPort`）支持 vmess/ss/ssr 的地址提取，但最终构建配置时会失败。
 - **只支持 Windows**。依赖 `wininet.dll`、`HKCU` 注册表、`netstat` / `taskkill` / `reg`。
 - **只监听回环地址**。控制台与 PAC 服务都绑定 `127.0.0.1`，不接受局域网访问。
+- **PWA 安装只在 Chrome / Edge 上可用**。Firefox 桌面版至今不支持安装 PWA
+  （iOS 16.4+ Safari 的「添加到主屏幕」可用，但那是另一套机制）。
+  没装成独立应用也不影响使用 —— 直接开 <http://127.0.0.1:6001/> 一切照旧。
+- **Service Worker 依赖安全上下文**。浏览器把 `127.0.0.1` 视为可信来源，
+  所以纯 HTTP 的本地地址也能启用 SW；换成局域网 IP 就不行了
+  （本项目本来也只监听回环，所以这个限制碰不到）。
+- **离线模式只有界面，没有数据**。后端退出后控制台外壳仍能打开（Service Worker 缓存），
+  但 `/api/*` 从不缓存，所有数据区都是空的 —— 这是有意为之：
+  给一份过期数据比明确报错更危险。
 - **无鉴权**。任何本机进程都能访问控制台并修改参数。这是单机工具的有意取舍，
   但也意味着不要把 `6001` 端口通过内网穿透暴露出去。
 - **访问日志不设保留上限，会持续增长**。按用户要求「一直存」，没有清理逻辑。

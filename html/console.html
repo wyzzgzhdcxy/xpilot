@@ -2,12 +2,21 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>xpilot 控制台</title>
+<!-- PWA：主题色决定手机/桌面端安装后的标题栏配色 -->
+<meta name="theme-color" content="#1e3a8a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="xpilot">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6fa;color:#1f2937;font:15px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif}
-.wrap{max-width:980px;margin:0 auto;padding:24px 16px 60px}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px 60px;padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
 header{background:linear-gradient(135deg,#1e3a8a,#2563eb 55%,#3b82f6);color:#fff;border-radius:16px;padding:20px 28px;margin-bottom:18px;box-shadow:0 8px 24px rgba(37,99,235,.22);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
 header h1{margin:0;font-size:22px}
 header .ptag{font-size:13px;color:#bfdbfe;font-weight:600;border:1px solid rgba(255,255,255,.45);border-radius:8px;padding:2px 10px;margin-left:10px;vertical-align:middle}
@@ -159,6 +168,7 @@ input:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:#93c5fd}
     <div class="sub">socks5 / http 同端口 · 选点状态实时推送</div>
   </div>
   <div class="links">
+    <button class="hbtn" id="installBtn" hidden onclick="doInstall()">安装到桌面</button>
     <button class="hbtn" onclick="act('/api/pac-refresh')">刷新 PAC</button>
     <button class="hbtn" onclick="act('/api/open-regedit')">打开注册表</button>
     <a class="hbtn" href="/html/xpilot-report.html" target="_blank">运行报告</a>
@@ -852,6 +862,67 @@ async function post(u, body) {
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   return resp.json();
 }
+// ---------- PWA ----------
+// Service Worker：注册失败不影响控制台本身，失败只记日志。
+// 127.0.0.1 属于可信来源，Service Worker 可以正常启用。
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(reg => {
+        // 有新版本装好了就让等待中的 SW 立刻接管，
+        // 否则用户要关掉所有标签页才会更新。
+        reg.addEventListener('updatefound', () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+              sw.postMessage('skipWaiting');
+            }
+          });
+        });
+      })
+      .catch(err => console.warn('Service Worker 注册失败:', err));
+  });
+}
+
+// 安装到桌面：Chrome/Edge 会在满足条件时派发 beforeinstallprompt，
+// 把安装入口延后到那时才显示（提前显示点了没反应更让人困惑）。
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstall = e;
+  const b = document.getElementById('installBtn');
+  if (b) b.hidden = false;
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstall = null;
+  const b = document.getElementById('installBtn');
+  if (b) b.hidden = true;
+});
+async function doInstall() {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  const choice = await deferredInstall.userChoice;
+  deferredInstall = null;
+  const b = document.getElementById('installBtn');
+  if (b) b.hidden = true;
+  if (choice && choice.outcome === 'accepted') alert('已安装到桌面');
+}
+
+// manifest 的快捷方式用 /?tab=xxx 定位到指定页。
+// 只认白名单里的页 id，非法值一律回落到"运行状态"。
+function applyTabFromURL() {
+  const want = new URLSearchParams(location.search).get('tab');
+  const map = {
+    status: 'tab-status', cfg: 'tab-cfg', route: 'tab-route', log: 'tab-log',
+    pac: 'tab-pac', xray: 'tab-xray', xpilot: 'tab-xpilot'
+  };
+  const id = map[want];
+  if (!id) return;
+  const btn = document.querySelector('.tabbtn[onclick*="' + id + '"]');
+  if (btn) showTab(id, btn);
+}
+applyTabFromURL();
 refresh();
 </script>
 </body></html>
